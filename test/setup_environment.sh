@@ -92,7 +92,7 @@ if [[ -n ${build_trezor_1} || -n ${build_trezor_t} ]]; then
     if [[ -n ${build_trezor_1} ]]; then
         # Build trezor one emulator. This is pretty fast, so rebuilding every time is ok
         # But there should be some caching that makes this faster
-        poetry install
+        uv sync --python "$(poetry env info --executable)"
         cd legacy
         export EMULATOR=1 TREZOR_TRANSPORT_V1=1 DEBUG_LINK=1 HEADLESS=1
         export CC=gcc-12
@@ -112,7 +112,7 @@ if [[ -n ${build_trezor_1} || -n ${build_trezor_t} ]]; then
         rustup component add rust-src --toolchain nightly-2025-02-20
         # Build trezor t emulator. This is pretty fast, so rebuilding every time is ok
         # But there should be some caching that makes this faster
-        poetry install
+        uv sync --python "$(poetry env info --executable)"
         cd core
         export CC=gcc-12
         poetry run make build_unix
