@@ -89,6 +89,9 @@ if [[ -n ${build_trezor_1} || -n ${build_trezor_t} ]]; then
     # Remove .venv so that poetry can symlink everything correctly
     find . -type d -name ".venv" -exec rm -rf {} +
 
+    # Initialize a poetry env if one doesn't exist
+    poetry run python -V >/dev/null 2>&1 || poetry install --no-root
+
     if [[ -n ${build_trezor_1} ]]; then
         # Build trezor one emulator. This is pretty fast, so rebuilding every time is ok
         # But there should be some caching that makes this faster
