@@ -106,11 +106,10 @@ if [[ -n ${build_trezor_1} || -n ${build_trezor_t} ]]; then
 
     if [[ -n ${build_trezor_t} ]]; then
         rustup update
-        rustup toolchain uninstall nightly
-        rustup toolchain install nightly
-        rustup default nightly
+        rustup toolchain install nightly-2025-02-20
+        rustup default nightly-2025-02-20
         rustup component add rustfmt
-        rustup component add rust-src --toolchain nightly-x86_64-unknown-linux-gnu
+        rustup component add rust-src --toolchain nightly-2025-02-20
         # Build trezor t emulator. This is pretty fast, so rebuilding every time is ok
         # But there should be some caching that makes this faster
         poetry install
