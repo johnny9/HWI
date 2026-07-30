@@ -4,6 +4,24 @@
 
 Creates a virtualenv with the locked dependencies using Poetry. Then uses pyinstaller to create a standalone binary for the OS type currently running.
 
+## `build_sidecar.sh`
+
+Builds the Linux or macOS proof-of-concept bundle intended to be installed
+alongside Bitcoin Core. Unlike the standalone release build, this produces a
+headless PyInstaller `onedir` bundle and a canonical manifest covering every
+runtime file, the HWI version, target tuple, and entry point. The manifest is
+unsigned; signing belongs to the application release process so that private
+release keys never enter the HWI build.
+
+Set `HWI_LIBUSB_PATH` to the target libusb shared library and run:
+
+```sh
+HWI_LIBUSB_PATH=/path/to/libusb-1.0.so.0 contrib/build_sidecar.sh
+```
+
+On macOS, use the path to `libusb-1.0.dylib`. The resulting unsigned bundle is
+written to `dist/hwi`.
+
 ## `build_dist.sh`
 
 Creates a virtualenv with the locked dependencies using Poetry. Then uses Poetry to produce deterministic builds of the wheel and sdist for upload to PyPi
