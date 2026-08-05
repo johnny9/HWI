@@ -40,10 +40,10 @@ The supported Guix targets are `x86_64-linux-gnu`,
 PyInstaller is not a cross-compiler, so the selected target Python,
 extensions, bootloader, collection pass, and runtime test must execute
 natively or through binfmt/QEMU. The GitHub workflow uses native hosted
-runners where available and QEMU-user for ARMv7 and RISC-V. For emulated Guix
-builds it disables the Guix build chroot only so the kernel can reach the
-host's pinned QEMU interpreter; the Guix package closure remains pinned and
-the two independent output archives still have to match exactly.
+runners where available and QEMU-user on x86_64 for ARMv7 and RISC-V. CI
+requires binfmt's fixed-interpreter flag so the static QEMU interpreter remains
+available inside Guix's normal build chroot. The two independent output
+archives still have to match exactly.
 
 To rebuild all inputs rather than accepting signed Guix substitutes:
 
@@ -58,7 +58,7 @@ The archive and its SHA256 file are written under `dist/guix`.
 | Bitcoin Core target | Builder used by HWI | CI execution environment |
 |---|---|---|
 | `x86_64-linux-gnu` | Guix, glibc 2.31 | Native GitHub x86_64 Linux |
-| `arm-linux-gnueabihf` | Guix, glibc 2.31 | GitHub ARM64 Linux with QEMU-user ARM |
+| `arm-linux-gnueabihf` | Guix, glibc 2.31 | GitHub x86_64 Linux with QEMU-user ARM |
 | `aarch64-linux-gnu` | Guix, glibc 2.31 | Native GitHub ARM64 Linux |
 | `riscv64-linux-gnu` | Guix, glibc 2.31 | GitHub x86_64 Linux with QEMU-user RISC-V |
 | `powerpc64-linux-gnu` | Native glibc 2.31 builder required | Blocked on a pinned big-endian ppc64 runner or QEMU image |

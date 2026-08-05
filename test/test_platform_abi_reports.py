@@ -28,6 +28,20 @@ windows_module = load_module("windows_abi_report", "windows_abi_report.py")
 
 
 class PlatformAbiReportsTest(unittest.TestCase):
+    def test_macos_load_command_versions_are_parsed_per_line(self):
+        load_commands = """
+Load command 10
+      cmd LC_BUILD_VERSION
+    minos 14.0
+Load command 11
+      cmd LC_VERSION_MIN_MACOSX
+  version 11.0
+"""
+        self.assertEqual(
+            macos_module.VERSION_PATTERN.findall(load_commands),
+            ["14.0", "11.0"],
+        )
+
     def test_macos_validation_accepts_core_deployment_target(self):
         report = {
             "macho_files": [

@@ -12,7 +12,10 @@ import subprocess
 from typing import Any, Dict, List
 
 
-VERSION_PATTERN = re.compile(r"^\s*(?:minos|version)\s+(\d+(?:\.\d+)+)\s*$")
+VERSION_PATTERN = re.compile(
+    r"^\s*(?:minos|version)\s+(\d+(?:\.\d+)+)\s*$",
+    re.MULTILINE,
+)
 
 
 def version_key(version: str) -> tuple[int, ...]:
