@@ -99,11 +99,66 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install Guix bootstrap client
+      - name: Install pinned Guix bootstrap client
+        env:
+          GUIX_INSTALLER_SHA256: 7f544e48c9082baf489207ac506acd78bf251355bbafffd744498e658880879d
+          GUIX_RELEASE_SIGNER: A28BF40C3E551372662D14F741AAE7DCCA3D8351
+          GUIX_VERSION: 1.5.0
         run: |
           sudo apt-get update
-          sudo apt-get install -y guix
-          sudo systemctl start guix-daemon
+          sudo apt-get install -y curl gnupg uidmap wget xz-utils
+          case "$(uname -m)" in
+            x86_64)
+              guix_system=x86_64-linux
+              guix_archive_sha256=aa41025489c5061543e9c48873eaa829b900b2da75d40f9648913622f5f47817
+              ;;
+            aarch64)
+              guix_system=aarch64-linux
+              guix_archive_sha256=a5d58b1d0294cad6adb1f2aff627d37feb5db763fdffbceb8551f2b12123cf39
+              ;;
+            *)
+              echo "Unsupported Guix bootstrap architecture: $(uname -m)" >&2
+              exit 1
+              ;;
+          esac
+
+          installer="${RUNNER_TEMP}/guix-install.sh"
+          archive="${RUNNER_TEMP}/guix-binary-${GUIX_VERSION}.${guix_system}.tar.xz"
+          signature="${archive}.sig"
+          release_key="${RUNNER_TEMP}/guix-release-key.gpg"
+          keyring="${RUNNER_TEMP}/guix-release-keyring"
+
+          curl --fail --location --silent --show-error \
+            "https://codeberg.org/guix/guix/raw/tag/v${GUIX_VERSION}/etc/guix-install.sh" \
+            --output "${installer}"
+          echo "${GUIX_INSTALLER_SHA256}  ${installer}" | sha256sum --check
+          curl --fail --location --silent --show-error \
+            "https://ftp.gnu.org/gnu/guix/$(basename "${archive}")" \
+            --output "${archive}"
+          echo "${guix_archive_sha256}  ${archive}" | sha256sum --check
+          curl --fail --location --silent --show-error \
+            "https://ftp.gnu.org/gnu/guix/$(basename "${signature}")" \
+            --output "${signature}"
+          curl --fail --location --silent --show-error \
+            https://codeberg.org/efraim.gpg --output "${release_key}"
+
+          fingerprint="$(
+            gpg --show-keys --with-colons "${release_key}" | \
+              awk -F: '$1 == "fpr" { print $10; exit }'
+          )"
+          test "${fingerprint}" = "${GUIX_RELEASE_SIGNER}"
+          mkdir -m 0700 "${keyring}"
+          gpg --homedir "${keyring}" --batch --import "${release_key}"
+          gpg --homedir "${keyring}" --batch --verify "${signature}" "${archive}"
+
+          # The official installer documents a stream of empty answers as its
+          # supported noninteractive mode. Disable pipefail only so yes(1)'s
+          # expected SIGPIPE does not mask the installer's exit status.
+          set +o pipefail
+          yes '' | sudo env "GUIX_BINARY_FILE_NAME=${archive}" bash "${installer}"
+          set -o pipefail
+          hash -r
+          sudo systemctl restart guix-daemon
           guix --version
 
       - name: Enable foreign-architecture execution
@@ -118,7 +173,7 @@ jobs:
           printf '%s\n' \
             '[Service]' \
             'ExecStart=' \
-            'ExecStart=/usr/bin/guix-daemon --build-users-group=_guixbuild --disable-chroot' | \
+            'ExecStart=/var/guix/profiles/per-user/root/current-guix/bin/guix-daemon --disable-chroot --discover=no' | \
             sudo tee /etc/systemd/system/guix-daemon.service.d/qemu.conf
           sudo systemctl daemon-reload
           sudo systemctl restart guix-daemon
@@ -138,7 +193,23 @@ jobs:
         env:
           HWI_GUIX_OUTPUT_DIR: dist/guix
           HWI_TARGET: ${{ matrix.triple }}
-        run: contrib/guix/build-sidecar
+        run: |
+          if contrib/guix/build-sidecar; then
+            exit 0
+          fi
+
+          echo "::error::The Guix build failed; showing the newest daemon build logs"
+          mapfile -t guix_logs < <(
+            sudo find /var/log/guix/drvs -type f -name '*.drv.gz' \
+              -printf '%T@ %p\n' | sort -nr | head -n 3 | cut -d' ' -f2-
+          )
+          for guix_log in "${guix_logs[@]}"; do
+            echo "::group::${guix_log}"
+            sudo gzip -cd "${guix_log}" || true
+            echo "::endgroup::"
+          done
+          sudo journalctl -u guix-daemon --no-pager -n 200 || true
+          exit 1
 
       - name: Validate and preserve exact archive bytes
         env:

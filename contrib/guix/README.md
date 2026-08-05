@@ -23,6 +23,12 @@ Bitcoin Core. The post-build check inspects every ELF file and enforces:
 - a maximum `GLIBC_2.31` symbol requirement; and
 - successful execution of `hwi --version` in the target environment.
 
+CI bootstraps the pinned channel with GNU Guix 1.5.0 release binaries rather
+than Ubuntu's older Guix package. Both supported bootstrap archives are pinned
+by SHA256 and checked against their GNU release signatures before installation.
+The bootstrap architecture is native to the runner; `guix time-machine` then
+evaluates the package with the exact channel revision in `channels.scm`.
+
 Run the native x86_64 build from a clean checkout with a working Guix daemon:
 
 ```sh
