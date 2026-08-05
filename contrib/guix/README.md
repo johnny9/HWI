@@ -1,10 +1,10 @@
-# Reproducible HWI sidecar builds
+# Reproducible HWI bundle builds
 
-HWI owns the sidecar artifacts. Bitcoin Core consumes a released archive only
+HWI owns the bundle artifacts. Bitcoin Core consumes a released archive only
 after checking its pinned archive hash, canonical manifest, and maintainer
 signature. Private release keys are deliberately absent from these builders.
 
-`sidecar-targets.json` is the target contract shared with CI. It lists every
+`bundle-targets.json` is the target contract shared with CI. It lists every
 target shipped by Bitcoin Core, the native or emulated execution environment,
 and the ABI values that must be measured from the finished bundle. CI builds
 each hosted target twice and accepts it only when the canonical archives are
@@ -14,9 +14,13 @@ byte-for-byte identical.
 
 The Guix package pins the complete package universe, obtains Python packages
 from Guix rather than PyPI during the build, compiles the PyInstaller
-bootloader from source, and creates the normalized unsigned archive. Its
-package graph is rewritten to the same glibc 2.31 source and patches used by
-Bitcoin Core. The post-build check inspects every ELF file and enforces:
+bootloader from source, and creates the normalized unsigned archive. The
+launcher is rewritten to the target's conventional ELF interpreter and an
+`$ORIGIN/_internal` runpath before it is manifested. Its package graph is
+rewritten to the same glibc 2.31 source and patches used by Bitcoin Core. The
+runtime probe executes the installed launcher through that pinned glibc's
+store loader, avoiding Guix 1.5's AppArmor prohibition on executing build-tree
+files under `/tmp`. The post-build checks enforce:
 
 - the target machine and endianness;
 - the target's standard ELF interpreter;
@@ -32,13 +36,13 @@ evaluates the package with the exact channel revision in `channels.scm`.
 Run the native x86_64 build from a clean checkout with a working Guix daemon:
 
 ```sh
-contrib/guix/build-sidecar
+contrib/guix/build-bundle
 ```
 
 Select another supported Guix system with its Bitcoin Core target triple:
 
 ```sh
-HWI_TARGET=aarch64-linux-gnu contrib/guix/build-sidecar
+HWI_TARGET=aarch64-linux-gnu contrib/guix/build-bundle
 ```
 
 The supported Guix targets are `x86_64-linux-gnu`,
@@ -55,7 +59,7 @@ match exactly.
 To rebuild all inputs rather than accepting signed Guix substitutes:
 
 ```sh
-HWI_GUIX_BUILD_FLAGS=--no-substitutes contrib/guix/build-sidecar
+HWI_GUIX_BUILD_FLAGS=--no-substitutes contrib/guix/build-bundle
 ```
 
 The archive and its SHA256 file are written under `dist/guix`.
@@ -91,9 +95,9 @@ to make it runnable; official Developer ID signatures and notarization remain
 a protected post-reproduction release step.
 
 The Windows job uses pinned Python and libusb inputs, validates every PE file
-as x86_64, executes the finished sidecar, and packages it with the same
+as x86_64, executes the finished bundle, and packages it with the same
 canonical manifest and archive code used on Unix.
 
 Successful CI publishes one `hwi-<target>-<reproducer>` artifact per build and
-a `hwi-sidecar-bundles-<commit>` artifact containing one verified archive per
+a `hwi-bundle-bundles-<commit>` artifact containing one verified archive per
 hosted target plus `SHA256SUMS`.

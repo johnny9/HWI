@@ -11,7 +11,7 @@ if not libusb_path:
 if not os.path.isfile(libusb_path):
     raise RuntimeError(f"HWI_LIBUSB_PATH does not exist: {libusb_path}")
 if platform.system() not in {"Linux", "Darwin", "Windows"}:
-    raise RuntimeError("The HWI sidecar supports Linux, macOS, and Windows")
+    raise RuntimeError("The HWI bundle supports Linux, macOS, and Windows")
 
 datas = []
 if platform.system() == "Linux":

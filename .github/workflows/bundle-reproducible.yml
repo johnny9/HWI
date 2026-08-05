@@ -1,26 +1,26 @@
-name: Reproducible sidecars
+name: Reproducible bundles
 
 on:
   pull_request:
     paths:
-      - ".github/workflows/sidecar-*.yml"
+      - ".github/workflows/bundle-*.yml"
       - "contrib/guix/**"
-      - "contrib/build_sidecar.sh"
-      - "contrib/compare_sidecar_archives.py"
-      - "contrib/generate_sidecar_manifest.py"
+      - "contrib/build_bundle.sh"
+      - "contrib/compare_bundle_archives.py"
+      - "contrib/generate_bundle_manifest.py"
       - "contrib/linux_abi_report.py"
       - "contrib/macos_abi_report.py"
       - "contrib/macos_ad_hoc_sign.py"
-      - "contrib/package_sidecar.py"
-      - "contrib/sidecar-targets.json"
-      - "contrib/sidecar_targets.py"
+      - "contrib/package_bundle.py"
+      - "contrib/bundle-targets.json"
+      - "contrib/bundle_targets.py"
       - "contrib/windows_abi_report.py"
       - "hwilib/**"
       - "hwi.py"
-      - "hwi-sidecar.spec"
+      - "hwi-bundle.spec"
       - "poetry.lock"
       - "pyproject.toml"
-      - "test/test_*sidecar*.py"
+      - "test/test_*bundle*.py"
       - "test/test_*abi*.py"
   push:
     branches:
@@ -60,16 +60,16 @@ jobs:
       - name: Validate and expand targets
         id: matrix
         run: |
-          python3 contrib/sidecar_targets.py
-          echo "linux=$(python3 contrib/sidecar_targets.py --matrix linux-guix)" >> "${GITHUB_OUTPUT}"
-          echo "linux_compare=$(python3 contrib/sidecar_targets.py --matrix linux-guix --reproducers compare)" >> "${GITHUB_OUTPUT}"
-          echo "macos=$(python3 contrib/sidecar_targets.py --matrix macos)" >> "${GITHUB_OUTPUT}"
-          echo "macos_compare=$(python3 contrib/sidecar_targets.py --matrix macos --reproducers compare)" >> "${GITHUB_OUTPUT}"
-          echo "windows=$(python3 contrib/sidecar_targets.py --matrix windows)" >> "${GITHUB_OUTPUT}"
-          echo "windows_compare=$(python3 contrib/sidecar_targets.py --matrix windows --reproducers compare)" >> "${GITHUB_OUTPUT}"
+          python3 contrib/bundle_targets.py
+          echo "linux=$(python3 contrib/bundle_targets.py --matrix linux-guix)" >> "${GITHUB_OUTPUT}"
+          echo "linux_compare=$(python3 contrib/bundle_targets.py --matrix linux-guix --reproducers compare)" >> "${GITHUB_OUTPUT}"
+          echo "macos=$(python3 contrib/bundle_targets.py --matrix macos)" >> "${GITHUB_OUTPUT}"
+          echo "macos_compare=$(python3 contrib/bundle_targets.py --matrix macos --reproducers compare)" >> "${GITHUB_OUTPUT}"
+          echo "windows=$(python3 contrib/bundle_targets.py --matrix windows)" >> "${GITHUB_OUTPUT}"
+          echo "windows_compare=$(python3 contrib/bundle_targets.py --matrix windows --reproducers compare)" >> "${GITHUB_OUTPUT}"
 
   archive-tests:
-    name: Sidecar metadata, ABI, and archive tests
+    name: Bundle metadata, ABI, and archive tests
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
@@ -80,9 +80,9 @@ jobs:
           python3 -m unittest \
             test.test_linux_abi_report \
             test.test_platform_abi_reports \
-            test.test_sidecar_manifest \
-            test.test_sidecar_archive \
-            test.test_sidecar_targets
+            test.test_bundle_manifest \
+            test.test_bundle_archive \
+            test.test_bundle_targets
 
   linux-guix:
     name: ${{ matrix.triple }} Guix build ${{ matrix.reproducer }}
@@ -158,7 +158,25 @@ jobs:
           yes '' | sudo env "GUIX_BINARY_FILE_NAME=${archive}" bash "${installer}"
           set -o pipefail
           hash -r
+
+          # The Guix 1.5.0 installer loads an AppArmor profile when one is
+          # available. On Ubuntu 24.04 GitHub-hosted runners that profile
+          # prevents the daemon's download helpers from reading
+          # /etc/gitconfig and creating their temporary directories. Keep the
+          # unconfined Guix client profile, which enables user namespaces, but
+          # run the daemon without its broken profile on this disposable VM.
+          if [[ -f /etc/apparmor.d/guix-daemon ]]; then
+            sudo systemctl stop guix-daemon
+            sudo apparmor_parser --remove /etc/apparmor.d/guix-daemon
+            sudo rm -f /etc/apparmor.d/guix-daemon
+          fi
+
           sudo systemctl restart guix-daemon
+          if sudo test -e /sys/kernel/security/apparmor/profiles &&
+             sudo grep -Eq '^guix-daemon(//| )' /sys/kernel/security/apparmor/profiles; then
+            echo "Guix daemon is still confined by AppArmor" >&2
+            exit 1
+          fi
           guix --version
 
       - name: Enable foreign-architecture execution
@@ -182,12 +200,12 @@ jobs:
             *) exit 1 ;;
           esac
 
-      - name: Build unsigned sidecar
+      - name: Build unsigned bundle
         env:
           HWI_GUIX_OUTPUT_DIR: dist/guix
           HWI_TARGET: ${{ matrix.triple }}
         run: |
-          if contrib/guix/build-sidecar; then
+          if contrib/guix/build-bundle; then
             exit 0
           fi
 
@@ -216,15 +234,15 @@ jobs:
         run: |
           archive="$(find dist/guix -maxdepth 1 -type f -name "hwi-*-${TARGET}.tar.gz" -print -quit)"
           test -n "${archive}"
-          mkdir -p build-sidecar-abi
-          tar -xzf "${archive}" -C build-sidecar-abi
+          mkdir -p build-bundle-abi
+          tar -xzf "${archive}" -C build-bundle-abi
           python3 contrib/linux_abi_report.py \
-            build-sidecar-abi/hwi \
+            build-bundle-abi/hwi \
             --expected-machine "${MACHINE}" \
             --expected-endianness "${ENDIANNESS}" \
             --expected-interpreter "${EXPECTED_INTERPRETER}" \
             --maximum-glibc "${GLIBC_MAXIMUM}" \
-            --output build-sidecar-abi/report.json
+            --output build-bundle-abi/report.json
           cp "${archive}" "hwi-${TARGET}-${REPRODUCER}.tar.gz"
           sha256sum "hwi-${TARGET}-${REPRODUCER}.tar.gz"
 
@@ -257,7 +275,7 @@ jobs:
           TARGET: ${{ matrix.triple }}
         run: |
           sha256sum "hwi-${TARGET}-a.tar.gz" "hwi-${TARGET}-b.tar.gz"
-          python3 contrib/compare_sidecar_archives.py \
+          python3 contrib/compare_bundle_archives.py \
             "hwi-${TARGET}-a.tar.gz" "hwi-${TARGET}-b.tar.gz"
 
   macos:
@@ -319,23 +337,23 @@ jobs:
           poetry config virtualenvs.in-project true --local
           poetry install --sync --no-interaction
 
-      - name: Build and finalize unsigned sidecar
+      - name: Build and finalize unsigned bundle
         env:
           ARCHITECTURE: ${{ matrix.architecture }}
           MAXIMUM_MACOS: ${{ matrix.minimum_macos }}
           REPRODUCER: ${{ matrix.reproducer }}
           TARGET: ${{ matrix.triple }}
         run: |
-          contrib/build_sidecar.sh
+          contrib/build_bundle.sh
           poetry run python contrib/macos_ad_hoc_sign.py dist/hwi
           poetry run python contrib/macos_abi_report.py \
             dist/hwi \
             --architecture "${ARCHITECTURE}" \
             --maximum-macos "${MAXIMUM_MACOS}" \
             --output dist/hwi-macos-abi.json
-          poetry run python contrib/generate_sidecar_manifest.py \
+          poetry run python contrib/generate_bundle_manifest.py \
             dist/hwi --platform macos --architecture "${ARCHITECTURE}"
-          poetry run python contrib/package_sidecar.py \
+          poetry run python contrib/package_bundle.py \
             dist/hwi "hwi-${TARGET}-${REPRODUCER}.tar.gz"
           dist/hwi/hwi --version
           shasum -a 256 "hwi-${TARGET}-${REPRODUCER}.tar.gz"
@@ -369,7 +387,7 @@ jobs:
           TARGET: ${{ matrix.triple }}
         run: |
           sha256sum "hwi-${TARGET}-a.tar.gz" "hwi-${TARGET}-b.tar.gz"
-          python3 contrib/compare_sidecar_archives.py \
+          python3 contrib/compare_bundle_archives.py \
             "hwi-${TARGET}-a.tar.gz" "hwi-${TARGET}-b.tar.gz"
 
   windows:
@@ -421,19 +439,19 @@ jobs:
           poetry config virtualenvs.in-project true --local
           poetry install --sync --no-interaction
 
-      - name: Build and finalize unsigned sidecar
+      - name: Build and finalize unsigned bundle
         shell: pwsh
         env:
           ARCHITECTURE: ${{ matrix.architecture }}
           REPRODUCER: ${{ matrix.reproducer }}
           TARGET: ${{ matrix.triple }}
         run: |
-          poetry run pyinstaller --clean --noconfirm hwi-sidecar.spec
-          poetry run python contrib/generate_sidecar_manifest.py `
+          poetry run pyinstaller --clean --noconfirm hwi-bundle.spec
+          poetry run python contrib/generate_bundle_manifest.py `
             dist/hwi --platform windows --architecture $env:ARCHITECTURE
           poetry run python contrib/windows_abi_report.py `
             dist/hwi --architecture $env:ARCHITECTURE --output dist/hwi-windows-abi.json
-          poetry run python contrib/package_sidecar.py `
+          poetry run python contrib/package_bundle.py `
             dist/hwi "hwi-$env:TARGET-$env:REPRODUCER.tar.gz"
           & dist/hwi/hwi.exe --version
           Get-FileHash -Algorithm SHA256 "hwi-$env:TARGET-$env:REPRODUCER.tar.gz"
@@ -466,11 +484,11 @@ jobs:
           TARGET: ${{ matrix.triple }}
         run: |
           sha256sum "hwi-${TARGET}-a.tar.gz" "hwi-${TARGET}-b.tar.gz"
-          python3 contrib/compare_sidecar_archives.py \
+          python3 contrib/compare_bundle_archives.py \
             "hwi-${TARGET}-a.tar.gz" "hwi-${TARGET}-b.tar.gz"
 
   bundle-set:
-    name: Assemble verified sidecar bundle set
+    name: Assemble verified bundle bundle set
     needs: [archive-tests, linux-compare, macos-compare, windows-compare]
     runs-on: ubuntu-24.04
     steps:
@@ -488,7 +506,7 @@ jobs:
       - name: Upload verified bundle set
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: hwi-sidecar-bundles-${{ github.sha }}
+          name: hwi-bundle-bundles-${{ github.sha }}
           path: |
             hwi-*.tar.gz
             SHA256SUMS

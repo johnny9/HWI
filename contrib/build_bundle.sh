@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the headless HWI sidecar for the current Linux or macOS target.
+# Build the headless HWI bundle for the current Linux or macOS target.
 
 export LC_ALL=C
 export PYTHONHASHSEED=0
@@ -16,7 +16,7 @@ fi
 case "$(uname -s)" in
     Linux|Darwin) ;;
     *)
-        echo "The HWI sidecar PoC currently supports Linux and macOS" >&2
+        echo "The HWI bundle PoC currently supports Linux and macOS" >&2
         exit 1
         ;;
 esac
@@ -27,7 +27,7 @@ export PYINSTALLER_CONFIG_DIR="${PYINSTALLER_CONFIG_DIR:-${project_dir}/build/py
 cd "${project_dir}"
 
 poetry install --sync
-poetry run pyinstaller --clean --noconfirm hwi-sidecar.spec
-poetry run python contrib/generate_sidecar_manifest.py dist/hwi
+poetry run pyinstaller --clean --noconfirm hwi-bundle.spec
+poetry run python contrib/generate_bundle_manifest.py dist/hwi
 
-echo "Unsigned sidecar created at ${project_dir}/dist/hwi"
+echo "Unsigned bundle created at ${project_dir}/dist/hwi"

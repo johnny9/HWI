@@ -2,7 +2,7 @@
 # Copyright (c) 2026 The HWI developers
 # Distributed under the MIT software license, see the accompanying
 # file LICENSE or http://www.opensource.org/licenses/mit-license.php.
-"""Generate the canonical file manifest for an HWI sidecar directory."""
+"""Generate the canonical file manifest for an HWI bundle directory."""
 
 import argparse
 import hashlib
@@ -43,13 +43,13 @@ def build_manifest(
     hwi_version: str = HWI_VERSION,
 ) -> Dict[str, Any]:
     if not bundle_dir.is_dir():
-        raise ValueError(f"sidecar directory does not exist: {bundle_dir}")
+        raise ValueError(f"bundle directory does not exist: {bundle_dir}")
     if not hwi_version:
         raise ValueError("HWI version must not be empty")
     entrypoint_name = entrypoint_for_platform(target_platform)
     entrypoint = bundle_dir / entrypoint_name
     if entrypoint.is_symlink() or not entrypoint.is_file():
-        raise ValueError(f"sidecar executable is missing or unsafe: {entrypoint}")
+        raise ValueError(f"bundle executable is missing or unsafe: {entrypoint}")
 
     files: List[Dict[str, Any]] = []
     resolved_bundle = bundle_dir.resolve()
@@ -60,13 +60,13 @@ def build_manifest(
         if path.is_symlink():
             target = path.readlink()
             if target.is_absolute():
-                raise ValueError(f"sidecar symlink target must be relative: {relative_name}")
+                raise ValueError(f"bundle symlink target must be relative: {relative_name}")
             try:
                 resolved_target = path.resolve(strict=True)
             except (FileNotFoundError, RuntimeError) as error:
-                raise ValueError(f"sidecar symlink target is invalid: {relative_name}") from error
+                raise ValueError(f"bundle symlink target is invalid: {relative_name}") from error
             if not resolved_target.is_relative_to(resolved_bundle):
-                raise ValueError(f"sidecar symlink escapes bundle: {relative_name}")
+                raise ValueError(f"bundle symlink escapes bundle: {relative_name}")
             files.append(
                 {
                     "path": relative_name,
@@ -78,7 +78,7 @@ def build_manifest(
         if path.is_dir():
             continue
         if not path.is_file():
-            raise ValueError(f"unsupported sidecar entry: {relative_name}")
+            raise ValueError(f"unsupported bundle entry: {relative_name}")
         if relative_name in EXCLUDED_NAMES:
             continue
         files.append(

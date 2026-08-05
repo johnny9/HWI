@@ -10,14 +10,14 @@ import tempfile
 import unittest
 
 
-MODULE_PATH = Path(__file__).parents[1] / "contrib" / "generate_sidecar_manifest.py"
-SPEC = importlib.util.spec_from_file_location("generate_sidecar_manifest", MODULE_PATH)
+MODULE_PATH = Path(__file__).parents[1] / "contrib" / "generate_bundle_manifest.py"
+SPEC = importlib.util.spec_from_file_location("generate_bundle_manifest", MODULE_PATH)
 assert SPEC is not None and SPEC.loader is not None
 manifest_module = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(manifest_module)
 
 
-class SidecarManifestTest(unittest.TestCase):
+class BundleManifestTest(unittest.TestCase):
     def test_manifest_is_canonical_and_complete(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             bundle = Path(temporary_directory)

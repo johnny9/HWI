@@ -37,13 +37,13 @@ read -r -a extra_flags <<< "${HWI_GUIX_BUILD_FLAGS:-}"
 store_output="$({
     guix time-machine -C contrib/guix/channels.scm -- \
         build --no-grafts --system="${guix_system}" "${extra_flags[@]}" \
-        -f contrib/guix/hwi-sidecar.scm
+        -f contrib/guix/hwi-bundle.scm
 } | tail -n 1)"
 
 mapfile -t archives < <(find "${store_output}" -maxdepth 1 -type f \
     -name 'hwi-*.tar.gz' -print)
 if [[ "${#archives[@]}" != 1 ]]; then
-    echo "Expected one sidecar archive in ${store_output}" >&2
+    echo "Expected one bundle archive in ${store_output}" >&2
     exit 1
 fi
 

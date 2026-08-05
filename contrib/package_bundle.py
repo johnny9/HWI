@@ -2,7 +2,7 @@
 # Copyright (c) 2026 The HWI developers
 # Distributed under the MIT software license, see the accompanying
 # file LICENSE or http://www.opensource.org/licenses/mit-license.php.
-"""Create a canonical tar.gz archive from a manifested HWI sidecar tree."""
+"""Create a canonical tar.gz archive from a manifested HWI bundle tree."""
 
 import argparse
 import gzip
@@ -13,7 +13,7 @@ import tarfile
 from pathlib import Path
 from typing import Any, Dict, Iterator
 
-from generate_sidecar_manifest import MANIFEST_NAME, build_manifest, canonical_json
+from generate_bundle_manifest import MANIFEST_NAME, build_manifest, canonical_json
 
 
 ARCHIVE_ROOT = Path("hwi")
@@ -31,14 +31,14 @@ def verify_manifest(bundle_dir: Path) -> Dict[str, Any]:
             manifest["hwi_version"],
         )
     except (KeyError, json.JSONDecodeError) as error:
-        raise ValueError(f"invalid sidecar manifest: {manifest_path}") from error
+        raise ValueError(f"invalid bundle manifest: {manifest_path}") from error
 
     if encoded != canonical_json(expected):
-        raise ValueError("sidecar contents do not match the canonical manifest")
+        raise ValueError("bundle contents do not match the canonical manifest")
 
     entrypoint = bundle_dir / manifest["entrypoint"]
     if manifest["platform"] != "windows" and not entrypoint.stat().st_mode & stat.S_IXUSR:
-        raise ValueError(f"sidecar entry point is not executable: {entrypoint}")
+        raise ValueError(f"bundle entry point is not executable: {entrypoint}")
     return manifest
 
 
@@ -58,7 +58,7 @@ def normalized_mode(path: Path, force_executable: bool = False) -> int:
         return 0o777
     if stat.S_ISREG(mode):
         return 0o755 if force_executable or mode & 0o111 else 0o644
-    raise ValueError(f"unsupported sidecar archive entry: {path}")
+    raise ValueError(f"unsupported bundle archive entry: {path}")
 
 
 def package_bundle(bundle_dir: Path, output: Path, source_date_epoch: int) -> None:

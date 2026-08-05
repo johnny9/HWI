@@ -25,17 +25,17 @@ def load_module(name: str, path: Path):
 
 
 manifest_module = load_module(
-    "generate_sidecar_manifest",
-    CONTRIB / "generate_sidecar_manifest.py",
+    "generate_bundle_manifest",
+    CONTRIB / "generate_bundle_manifest.py",
 )
-package_module = load_module("package_sidecar", CONTRIB / "package_sidecar.py")
+package_module = load_module("package_bundle", CONTRIB / "package_bundle.py")
 compare_module = load_module(
-    "compare_sidecar_archives",
-    CONTRIB / "compare_sidecar_archives.py",
+    "compare_bundle_archives",
+    CONTRIB / "compare_bundle_archives.py",
 )
 
 
-class SidecarArchiveTest(unittest.TestCase):
+class BundleArchiveTest(unittest.TestCase):
     def make_bundle(self, directory: Path) -> Path:
         bundle = directory / "bundle"
         (bundle / "_internal").mkdir(parents=True)

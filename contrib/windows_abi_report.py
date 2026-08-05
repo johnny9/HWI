@@ -2,7 +2,7 @@
 # Copyright (c) 2026 The HWI developers
 # Distributed under the MIT software license, see the accompanying
 # file LICENSE or http://www.opensource.org/licenses/mit-license.php.
-"""Validate PE architecture and subsystem versions in a sidecar tree."""
+"""Validate PE architecture and subsystem versions in a bundle tree."""
 
 import argparse
 import json

@@ -2,7 +2,7 @@
 # Copyright (c) 2026 The HWI developers
 # Distributed under the MIT software license, see the accompanying
 # file LICENSE or http://www.opensource.org/licenses/mit-license.php.
-"""Validate the ELF architecture and GLIBC requirements of a sidecar tree."""
+"""Validate the ELF architecture and GLIBC requirements of a bundle tree."""
 
 import argparse
 import json

@@ -2,7 +2,7 @@
 # Copyright (c) 2026 The HWI developers
 # Distributed under the MIT software license, see the accompanying
 # file LICENSE or http://www.opensource.org/licenses/mit-license.php.
-"""Compare two canonical HWI sidecar archives and identify every mismatch."""
+"""Compare two canonical HWI bundle archives and identify every mismatch."""
 
 import argparse
 import hashlib
@@ -103,7 +103,7 @@ def main() -> None:
         print(difference)
         if os.environ.get("GITHUB_ACTIONS") == "true":
             print(
-                "::error title=Sidecar archive mismatch::"
+                "::error title=Bundle archive mismatch::"
                 f"{github_escape(difference)}"
             )
     if len(differences) > 50:

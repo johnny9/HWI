@@ -9,15 +9,15 @@ import sys
 import unittest
 
 
-MODULE_PATH = Path(__file__).parents[1] / "contrib" / "sidecar_targets.py"
-SPEC = importlib.util.spec_from_file_location("sidecar_targets", MODULE_PATH)
+MODULE_PATH = Path(__file__).parents[1] / "contrib" / "bundle_targets.py"
+SPEC = importlib.util.spec_from_file_location("bundle_targets", MODULE_PATH)
 assert SPEC is not None and SPEC.loader is not None
 targets_module = importlib.util.module_from_spec(SPEC)
-sys.modules["sidecar_targets"] = targets_module
+sys.modules["bundle_targets"] = targets_module
 SPEC.loader.exec_module(targets_module)
 
 
-class SidecarTargetsTest(unittest.TestCase):
+class BundleTargetsTest(unittest.TestCase):
     def test_target_file_covers_bitcoin_core(self):
         targets = targets_module.load_targets()
         self.assertEqual(

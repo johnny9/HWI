@@ -2,7 +2,7 @@
 # Copyright (c) 2026 The HWI developers
 # Distributed under the MIT software license, see the accompanying
 # file LICENSE or http://www.opensource.org/licenses/mit-license.php.
-"""Ad-hoc sign every Mach-O file in an HWI sidecar, leaf-first."""
+"""Ad-hoc sign every Mach-O file in an HWI bundle, leaf-first."""
 
 import argparse
 from pathlib import Path

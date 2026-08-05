@@ -2,7 +2,7 @@
 # Copyright (c) 2026 The HWI developers
 # Distributed under the MIT software license, see the accompanying
 # file LICENSE or http://www.opensource.org/licenses/mit-license.php.
-"""Validate sidecar targets and emit GitHub Actions build matrices."""
+"""Validate bundle targets and emit GitHub Actions build matrices."""
 
 import argparse
 import json
@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
 
-TARGETS_PATH = Path(__file__).with_name("sidecar-targets.json")
+TARGETS_PATH = Path(__file__).with_name("bundle-targets.json")
 CORE_TARGETS = {
     "aarch64-linux-gnu",
     "arm-linux-gnueabihf",
@@ -26,7 +26,7 @@ CORE_TARGETS = {
 def load_targets(path: Path = TARGETS_PATH) -> List[Dict[str, Any]]:
     document = json.loads(path.read_text(encoding="utf8"))
     if document.get("format") != 1 or not isinstance(document.get("targets"), list):
-        raise ValueError("unsupported sidecar target document")
+        raise ValueError("unsupported bundle target document")
     targets = document["targets"]
     validate_targets(targets)
     return targets
@@ -41,11 +41,11 @@ def require_fields(target: Dict[str, Any], fields: Iterable[str]) -> None:
 def validate_targets(targets: List[Dict[str, Any]]) -> None:
     triples = [target.get("triple") for target in targets]
     if len(triples) != len(set(triples)):
-        raise ValueError("sidecar target triples must be unique")
+        raise ValueError("bundle target triples must be unique")
     if set(triples) != CORE_TARGETS:
         missing = sorted(CORE_TARGETS - set(triples))
         extra = sorted(set(triples) - CORE_TARGETS)
-        raise ValueError(f"sidecar target set differs from Bitcoin Core: missing={missing}, extra={extra}")
+        raise ValueError(f"bundle target set differs from Bitcoin Core: missing={missing}, extra={extra}")
 
     common = ("architecture", "builder", "group", "hosted", "platform", "runner", "triple")
     linux = common + (
@@ -93,7 +93,7 @@ def main() -> None:
             raise ValueError("at least one reproducer is required")
         print(json.dumps(build_matrix(targets, args.matrix, reproducers), separators=(",", ":")))
     else:
-        print(f"validated {len(targets)} Bitcoin Core sidecar targets")
+        print(f"validated {len(targets)} Bitcoin Core bundle targets")
 
 
 if __name__ == "__main__":
