@@ -40,9 +40,10 @@ The supported Guix targets are `x86_64-linux-gnu`,
 PyInstaller is not a cross-compiler, so the selected target Python,
 extensions, bootloader, collection pass, and runtime test must execute
 natively or through binfmt/QEMU. The GitHub workflow uses native hosted
-runners where available and QEMU-user on x86_64 for ARMv7 and RISC-V. CI
-requires binfmt's fixed-interpreter flag so the static QEMU interpreter remains
-available inside Guix's normal build chroot. The two independent output
+runners where available and QEMU-user on x86_64 for ARMv7 and RISC-V. Ubuntu's
+binfmt registrations reference a host path that is unavailable inside Guix's
+build chroot, so only the emulated jobs run the Guix daemon without that
+chroot. The package closure remains pinned, and two independent output
 archives still have to match exactly.
 
 To rebuild all inputs rather than accepting signed Guix substitutes:

@@ -38,9 +38,20 @@ Load command 11
   version 11.0
 """
         self.assertEqual(
-            macos_module.VERSION_PATTERN.findall(load_commands),
+            macos_module.minimum_versions(load_commands),
             ["14.0", "11.0"],
         )
+
+    def test_macos_ignores_non_deployment_versions(self):
+        load_commands = """
+Load command 1
+      cmd LC_ID_DYLIB
+  current version 1167.5.0
+Load command 2
+      cmd LC_BUILD_VERSION
+    minos 14.0
+"""
+        self.assertEqual(macos_module.minimum_versions(load_commands), ["14.0"])
 
     def test_macos_validation_accepts_core_deployment_target(self):
         report = {

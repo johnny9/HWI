@@ -12,14 +12,29 @@ import subprocess
 from typing import Any, Dict, List
 
 
-VERSION_PATTERN = re.compile(
-    r"^\s*(?:minos|version)\s+(\d+(?:\.\d+)+)\s*$",
-    re.MULTILINE,
-)
+VERSION_PATTERN = re.compile(r"^(?:minos|version)\s+(\d+(?:\.\d+)+)$")
+VERSION_COMMANDS = {"LC_BUILD_VERSION", "LC_VERSION_MIN_MACOSX"}
 
 
 def version_key(version: str) -> tuple[int, ...]:
     return tuple(int(part) for part in version.split("."))
+
+
+def minimum_versions(load_commands: str) -> List[str]:
+    versions = []
+    version_command = False
+    for line in load_commands.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("cmd "):
+            version_command = stripped.removeprefix("cmd ") in VERSION_COMMANDS
+            continue
+        if not version_command:
+            continue
+        match = VERSION_PATTERN.match(stripped)
+        if match:
+            versions.append(match.group(1))
+            version_command = False
+    return versions
 
 
 def inspect_macho(path: Path, root: Path, description: str) -> Dict[str, Any]:
@@ -35,13 +50,13 @@ def inspect_macho(path: Path, root: Path, description: str) -> Dict[str, Any]:
         architecture = "x86_64"
     else:
         raise RuntimeError(f"unsupported Mach-O architecture in {path}: {description}")
-    minimum_versions = sorted(
-        set(VERSION_PATTERN.findall(load_commands)),
+    minimum_macos_versions = sorted(
+        set(minimum_versions(load_commands)),
         key=version_key,
     )
     return {
         "architecture": architecture,
-        "minimum_macos_versions": minimum_versions,
+        "minimum_macos_versions": minimum_macos_versions,
         "path": path.relative_to(root).as_posix(),
     }
 
