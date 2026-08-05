@@ -14,11 +14,14 @@
              (gnu packages python-xyz)
              (guix build-system gnu)
              (guix build-system pyproject)
+             (guix build-system python)
              (guix download)
              (guix gexp)
              (guix git-download)
              ((guix licenses) #:prefix license:)
              (guix packages)
+             ((guix utils) #:select (nix-system->gnu-triplet
+                                     substitute-keyword-arguments))
              (ice-9 ftw))
 
 (define hwi-version "3.2.0")
@@ -30,10 +33,78 @@
 (define repository-predicate
   (or (git-predicate repository-root)
       (lambda (_file _stat) #t)))
-(define use-glibc-2.35
-  ;; Keep the sidecar compatible with the glibc baseline enforced by the
-  ;; Bitcoin Core integration PoC instead of inheriting Guix's rolling libc.
-  (package-input-rewriting `((,glibc . ,glibc-2.35))))
+
+(define target-triple
+  (or (getenv "HWI_TARGET") "x86_64-linux-gnu"))
+(define target-configurations
+  '(("x86_64-linux-gnu" "x86_64-linux" "x86_64")
+    ("arm-linux-gnueabihf" "armhf-linux" "arm")
+    ("aarch64-linux-gnu" "aarch64-linux" "aarch64")
+    ("riscv64-linux-gnu" "riscv64-linux" "riscv64")))
+(define target-configuration
+  (or (assoc target-triple target-configurations)
+      (error "unsupported Guix HWI target" target-triple)))
+(define target-system (cadr target-configuration))
+(define target-architecture (caddr target-configuration))
+
+(unless (string=? target-system (%current-system))
+  (error "HWI_TARGET does not match the Guix --system value"
+         target-triple target-system (%current-system)))
+
+(define-syntax-rule (search-our-patches file-name ...)
+  (parameterize
+      ((%patch-path
+        (list (string-append (dirname (current-filename)) "/patches"))))
+    (list (search-patch file-name) ...)))
+
+(define building-on
+  (string-append "--build=" (nix-system->gnu-triplet (%current-system))))
+
+(define glibc-2.31-for-bitcoin-core
+  ;; This is the same glibc source, hardening configuration, and RISC-V fix
+  ;; used by Bitcoin Core's Guix toolchains.  Keeping the recipe here makes
+  ;; HWI, rather than Bitcoin Core, responsible for the sidecar ABI contract.
+  (let ((commit "28eb5caf895ced5d895cb02757e109004a2d33e5"))
+    (package
+      (inherit glibc)
+      (version "2.31")
+      (source
+       (origin
+         (method git-fetch)
+         (uri (git-reference
+               (url "https://sourceware.org/git/glibc.git")
+               (commit commit)))
+         (file-name (git-file-name "glibc" commit))
+         (sha256
+          (base32
+           "07arjrc1smqy8wrhg38apr1s9ji7xv1rpzdapk4k2ps2n07irp58"))
+         (patches
+          (search-our-patches "glibc-guix-prefix.patch"
+                              "glibc-riscv-jumptarget.patch"))))
+      (arguments
+       (substitute-keyword-arguments (package-arguments glibc)
+         ((#:configure-flags flags)
+          `(append ,flags
+                   (list "--enable-stack-protector=all"
+                         "--enable-cet"
+                         "--enable-bind-now"
+                         "--disable-werror"
+                         "--disable-timezone-tools"
+                         "--disable-profile"
+                         ,building-on)))
+         ((#:phases phases)
+          `(modify-phases ,phases
+             (add-before 'configure 'set-etc-rpc-installation-directory
+               (lambda* (#:key outputs #:allow-other-keys)
+                 (let ((out (assoc-ref outputs "out")))
+                   (substitute* "sunrpc/Makefile"
+                     (("^\\$\\(inst_sysconfdir\\)/rpc(.*)$" _ suffix)
+                      (string-append out "/etc/rpc" suffix "\n"))
+                     (("^install-others =.*$")
+                      (string-append "install-others = " out "/etc/rpc\n")))))))))))))
+
+(define use-bitcoin-core-glibc
+  (package-input-rewriting `((,glibc . ,glibc-2.31-for-bitcoin-core))))
 
 (define python-cbor2-for-hwi
   (package
@@ -143,7 +214,7 @@ application bundles.  This variant always compiles its bootloader from source.")
               (invoke "python3" "contrib/generate_sidecar_manifest.py"
                       "dist/hwi"
                       "--platform" "linux"
-                      "--architecture" "x86_64"))))
+                      "--architecture" #$target-architecture))))
         (replace 'check
           (lambda _
             (invoke "python3" "-m" "unittest"
@@ -154,7 +225,7 @@ application bundles.  This variant always compiles its bootloader from source.")
           (lambda _
             (let ((archive
                    (string-append #$output "/hwi-" #$hwi-version
-                                  "-x86_64-linux-gnu.tar.gz")))
+                                  "-" #$target-triple ".tar.gz")))
               (mkdir-p #$output)
               (copy-recursively "dist/hwi" (string-append #$output "/hwi"))
               (invoke "python3" "contrib/package_sidecar.py"
@@ -175,7 +246,7 @@ application bundles.  This variant always compiles its bootloader from source.")
          python-pyserial
          python-semver
          python-typing-extensions))
-  (supported-systems '("x86_64-linux"))
+  (supported-systems (list target-system))
   (home-page "https://github.com/bitcoin-core/HWI")
   (synopsis "Reproducible headless HWI sidecar")
   (description
@@ -184,4 +255,4 @@ manifest in an isolated Guix environment, then package it as a normalized
 archive for independent reproduction.")
   (license license:expat)))
 
-(use-glibc-2.35 hwi-sidecar)
+(use-bitcoin-core-glibc hwi-sidecar)

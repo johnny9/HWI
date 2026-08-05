@@ -91,6 +91,13 @@ class SidecarManifestTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "must not be empty"):
                 manifest_module.build_manifest(bundle, "linux", "x86_64", "")
 
+    def test_windows_uses_exe_entrypoint(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            bundle = Path(temporary_directory)
+            (bundle / "hwi.exe").write_bytes(b"executable")
+            manifest = manifest_module.build_manifest(bundle, "windows", "x86_64")
+            self.assertEqual(manifest["entrypoint"], "hwi.exe")
+
 
 if __name__ == "__main__":
     unittest.main()

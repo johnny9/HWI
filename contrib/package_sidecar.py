@@ -11,7 +11,7 @@ import os
 import stat
 import tarfile
 from pathlib import Path
-from typing import Iterator
+from typing import Any, Dict, Iterator
 
 from generate_sidecar_manifest import MANIFEST_NAME, build_manifest, canonical_json
 
@@ -19,7 +19,7 @@ from generate_sidecar_manifest import MANIFEST_NAME, build_manifest, canonical_j
 ARCHIVE_ROOT = Path("hwi")
 
 
-def verify_manifest(bundle_dir: Path) -> None:
+def verify_manifest(bundle_dir: Path) -> Dict[str, Any]:
     manifest_path = bundle_dir / MANIFEST_NAME
     try:
         encoded = manifest_path.read_bytes()
@@ -37,8 +37,9 @@ def verify_manifest(bundle_dir: Path) -> None:
         raise ValueError("sidecar contents do not match the canonical manifest")
 
     entrypoint = bundle_dir / manifest["entrypoint"]
-    if not entrypoint.stat().st_mode & stat.S_IXUSR:
+    if manifest["platform"] != "windows" and not entrypoint.stat().st_mode & stat.S_IXUSR:
         raise ValueError(f"sidecar entry point is not executable: {entrypoint}")
+    return manifest
 
 
 def iter_entries(bundle_dir: Path) -> Iterator[Path]:
@@ -49,14 +50,14 @@ def iter_entries(bundle_dir: Path) -> Iterator[Path]:
     )
 
 
-def normalized_mode(path: Path) -> int:
+def normalized_mode(path: Path, force_executable: bool = False) -> int:
     mode = path.lstat().st_mode
     if stat.S_ISDIR(mode):
         return 0o755
     if stat.S_ISLNK(mode):
         return 0o777
     if stat.S_ISREG(mode):
-        return 0o755 if mode & 0o111 else 0o644
+        return 0o755 if force_executable or mode & 0o111 else 0o644
     raise ValueError(f"unsupported sidecar archive entry: {path}")
 
 
@@ -64,7 +65,8 @@ def package_bundle(bundle_dir: Path, output: Path, source_date_epoch: int) -> No
     bundle_dir = bundle_dir.resolve(strict=True)
     if source_date_epoch < 0:
         raise ValueError("SOURCE_DATE_EPOCH must not be negative")
-    verify_manifest(bundle_dir)
+    manifest = verify_manifest(bundle_dir)
+    entrypoint = bundle_dir / manifest["entrypoint"]
 
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary_output = output.with_name(f".{output.name}.tmp")
@@ -91,7 +93,7 @@ def package_bundle(bundle_dir: Path, output: Path, source_date_epoch: int) -> No
                         info.uname = ""
                         info.gname = ""
                         info.mtime = source_date_epoch
-                        info.mode = normalized_mode(path)
+                        info.mode = normalized_mode(path, path == entrypoint)
                         if info.isreg():
                             with path.open("rb") as source:
                                 archive.addfile(info, source)

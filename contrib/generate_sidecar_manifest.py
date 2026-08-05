@@ -22,7 +22,10 @@ from hwilib import __version__ as HWI_VERSION  # noqa: E402
 MANIFEST_NAME = "hwi-manifest.json"
 SIGNATURE_NAME = "hwi-manifest.sig"
 EXCLUDED_NAMES = {MANIFEST_NAME, SIGNATURE_NAME}
-ENTRYPOINT = "hwi"
+
+
+def entrypoint_for_platform(target_platform: str) -> str:
+    return "hwi.exe" if target_platform == "windows" else "hwi"
 
 
 def sha256_file(path: Path) -> str:
@@ -43,7 +46,8 @@ def build_manifest(
         raise ValueError(f"sidecar directory does not exist: {bundle_dir}")
     if not hwi_version:
         raise ValueError("HWI version must not be empty")
-    entrypoint = bundle_dir / ENTRYPOINT
+    entrypoint_name = entrypoint_for_platform(target_platform)
+    entrypoint = bundle_dir / entrypoint_name
     if entrypoint.is_symlink() or not entrypoint.is_file():
         raise ValueError(f"sidecar executable is missing or unsafe: {entrypoint}")
 
@@ -88,7 +92,7 @@ def build_manifest(
 
     return {
         "architecture": architecture,
-        "entrypoint": ENTRYPOINT,
+        "entrypoint": entrypoint_name,
         "files": files,
         "format": 1,
         "hwi_version": hwi_version,
@@ -105,7 +109,9 @@ def main() -> None:
     parser.add_argument("bundle_dir", type=Path)
     parser.add_argument(
         "--platform",
-        default={"Darwin": "macos", "Linux": "linux"}.get(platform.system(), platform.system().lower()),
+        default={"Darwin": "macos", "Linux": "linux", "Windows": "windows"}.get(
+            platform.system(), platform.system().lower()
+        ),
         dest="target_platform",
     )
     parser.add_argument("--architecture", default=platform.machine().lower())

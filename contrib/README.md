@@ -4,9 +4,9 @@
 
 Creates a virtualenv with the locked dependencies using Poetry. Then uses pyinstaller to create a standalone binary for the OS type currently running.
 
-## `build_sidecar.sh`
+## Reproducible sidecar bundles
 
-Builds the Linux or macOS proof-of-concept bundle intended to be installed
+`build_sidecar.sh` builds the Linux or macOS bundle intended to be installed
 alongside Bitcoin Core. Unlike the standalone release build, this produces a
 headless PyInstaller `onedir` bundle and a canonical manifest covering every
 runtime file, the HWI version, target tuple, and entry point. The manifest is
@@ -19,8 +19,9 @@ Set `HWI_LIBUSB_PATH` to the target libusb shared library and run:
 HWI_LIBUSB_PATH=/path/to/libusb-1.0.so.0 contrib/build_sidecar.sh
 ```
 
-On macOS, use the path to `libusb-1.0.dylib`. The resulting unsigned bundle is
-written to `dist/hwi`.
+On macOS, use the path to `libusb-1.0.dylib`. Native Windows CI invokes the
+same PyInstaller specification with a pinned `libusb-1.0.dll`. The resulting
+unsigned bundle is written to `dist/hwi`.
 
 `package_sidecar.py` validates that the bundle still matches its canonical
 manifest and packages it with normalized ordering, ownership, permissions,
@@ -32,8 +33,8 @@ SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)" \
     dist/hwi dist/hwi-sidecar.tar.gz
 ```
 
-The authoritative Linux x86_64 builder and the current target-support matrix
-are documented in `guix/README.md`.
+The authoritative Guix builder, Bitcoin Core target contract, hosted CI
+coverage, and big-endian POWER exception are documented in `guix/README.md`.
 
 ## `build_dist.sh`
 

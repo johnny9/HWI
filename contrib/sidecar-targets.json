@@ -1,0 +1,105 @@
+{
+  "format": 1,
+  "targets": [
+    {
+      "architecture": "x86_64",
+      "builder": "guix",
+      "endianness": "little",
+      "expected_interpreter": "/lib64/ld-linux-x86-64.so.2",
+      "glibc_maximum": "2.31",
+      "group": "linux-guix",
+      "guix_system": "x86_64-linux",
+      "hosted": true,
+      "machine": "x86_64",
+      "platform": "linux",
+      "runner": "ubuntu-24.04",
+      "triple": "x86_64-linux-gnu"
+    },
+    {
+      "architecture": "arm",
+      "builder": "guix-qemu-user",
+      "endianness": "little",
+      "expected_interpreter": "/lib/ld-linux-armhf.so.3",
+      "glibc_maximum": "2.31",
+      "group": "linux-guix",
+      "guix_system": "armhf-linux",
+      "hosted": true,
+      "machine": "arm",
+      "platform": "linux",
+      "qemu_binfmt": "qemu-arm",
+      "runner": "ubuntu-24.04-arm",
+      "triple": "arm-linux-gnueabihf"
+    },
+    {
+      "architecture": "aarch64",
+      "builder": "guix",
+      "endianness": "little",
+      "expected_interpreter": "/lib/ld-linux-aarch64.so.1",
+      "glibc_maximum": "2.31",
+      "group": "linux-guix",
+      "guix_system": "aarch64-linux",
+      "hosted": true,
+      "machine": "aarch64",
+      "platform": "linux",
+      "runner": "ubuntu-24.04-arm",
+      "triple": "aarch64-linux-gnu"
+    },
+    {
+      "architecture": "riscv64",
+      "builder": "guix-qemu-user",
+      "endianness": "little",
+      "expected_interpreter": "/lib/ld-linux-riscv64-lp64d.so.1",
+      "glibc_maximum": "2.31",
+      "group": "linux-guix",
+      "guix_system": "riscv64-linux",
+      "hosted": true,
+      "machine": "riscv64",
+      "platform": "linux",
+      "qemu_binfmt": "qemu-riscv64",
+      "runner": "ubuntu-24.04",
+      "triple": "riscv64-linux-gnu"
+    },
+    {
+      "architecture": "powerpc64",
+      "builder": "native-glibc-2.31",
+      "endianness": "big",
+      "expected_interpreter": "/lib64/ld64.so.1",
+      "glibc_maximum": "2.31",
+      "group": "linux-native",
+      "hosted": false,
+      "machine": "powerpc64",
+      "platform": "linux",
+      "runner": "self-hosted-linux-powerpc64",
+      "triple": "powerpc64-linux-gnu"
+    },
+    {
+      "architecture": "x86_64",
+      "builder": "native-windows",
+      "group": "windows",
+      "hosted": true,
+      "platform": "windows",
+      "runner": "windows-2025",
+      "triple": "x86_64-w64-mingw32"
+    },
+    {
+      "architecture": "x86_64",
+      "builder": "native-macos",
+      "group": "macos",
+      "hosted": true,
+      "minimum_macos": "14.0",
+      "platform": "macos",
+      "runner": "macos-15-intel",
+      "triple": "x86_64-apple-darwin"
+    },
+    {
+      "architecture": "arm64",
+      "builder": "native-macos",
+      "group": "macos",
+      "hosted": true,
+      "minimum_macos": "14.0",
+      "platform": "macos",
+      "runner": "macos-15",
+      "triple": "arm64-apple-darwin"
+    }
+  ]
+}

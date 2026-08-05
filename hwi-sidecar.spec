@@ -10,12 +10,13 @@ if not libusb_path:
     raise RuntimeError("HWI_LIBUSB_PATH must name the target libusb shared library")
 if not os.path.isfile(libusb_path):
     raise RuntimeError(f"HWI_LIBUSB_PATH does not exist: {libusb_path}")
-if platform.system() not in {"Linux", "Darwin"}:
-    raise RuntimeError("The HWI sidecar PoC currently supports Linux and macOS")
+if platform.system() not in {"Linux", "Darwin", "Windows"}:
+    raise RuntimeError("The HWI sidecar supports Linux, macOS, and Windows")
 
 datas = []
 if platform.system() == "Linux":
     datas.append(("hwilib/udev", "hwilib/udev"))
+strip_binaries = platform.system() != "Windows"
 
 a = Analysis(
     ["hwi.py"],
@@ -38,7 +39,7 @@ exe = EXE(
     name="hwi",
     debug=False,
     bootloader_ignore_signals=False,
-    strip=True,
+    strip=strip_binaries,
     upx=False,
     console=True,
 )
@@ -47,7 +48,7 @@ bundle = COLLECT(
     exe,
     a.binaries,
     a.datas,
-    strip=True,
+    strip=strip_binaries,
     upx=False,
     name="hwi",
 )

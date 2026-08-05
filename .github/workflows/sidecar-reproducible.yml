@@ -3,20 +3,25 @@ name: Reproducible sidecars
 on:
   pull_request:
     paths:
-      - ".github/workflows/sidecar-reproducible.yml"
+      - ".github/workflows/sidecar-*.yml"
       - "contrib/guix/**"
       - "contrib/build_sidecar.sh"
       - "contrib/compare_sidecar_archives.py"
       - "contrib/generate_sidecar_manifest.py"
       - "contrib/linux_abi_report.py"
+      - "contrib/macos_abi_report.py"
       - "contrib/macos_ad_hoc_sign.py"
       - "contrib/package_sidecar.py"
+      - "contrib/sidecar-targets.json"
+      - "contrib/sidecar_targets.py"
+      - "contrib/windows_abi_report.py"
       - "hwilib/**"
       - "hwi.py"
       - "hwi-sidecar.spec"
       - "poetry.lock"
       - "pyproject.toml"
-      - "test/test_sidecar_*.py"
+      - "test/test_*sidecar*.py"
+      - "test/test_*abi*.py"
   push:
     branches:
       - "**"
@@ -38,24 +43,55 @@ env:
   PYTHONNOUSERSITE: "1"
 
 jobs:
+  targets:
+    name: Validate Bitcoin Core target matrix
+    runs-on: ubuntu-24.04
+    outputs:
+      linux: ${{ steps.matrix.outputs.linux }}
+      linux_compare: ${{ steps.matrix.outputs.linux_compare }}
+      macos: ${{ steps.matrix.outputs.macos }}
+      macos_compare: ${{ steps.matrix.outputs.macos_compare }}
+      windows: ${{ steps.matrix.outputs.windows }}
+      windows_compare: ${{ steps.matrix.outputs.windows_compare }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Validate and expand targets
+        id: matrix
+        run: |
+          python3 contrib/sidecar_targets.py
+          echo "linux=$(python3 contrib/sidecar_targets.py --matrix linux-guix)" >> "${GITHUB_OUTPUT}"
+          echo "linux_compare=$(python3 contrib/sidecar_targets.py --matrix linux-guix --reproducers compare)" >> "${GITHUB_OUTPUT}"
+          echo "macos=$(python3 contrib/sidecar_targets.py --matrix macos)" >> "${GITHUB_OUTPUT}"
+          echo "macos_compare=$(python3 contrib/sidecar_targets.py --matrix macos --reproducers compare)" >> "${GITHUB_OUTPUT}"
+          echo "windows=$(python3 contrib/sidecar_targets.py --matrix windows)" >> "${GITHUB_OUTPUT}"
+          echo "windows_compare=$(python3 contrib/sidecar_targets.py --matrix windows --reproducers compare)" >> "${GITHUB_OUTPUT}"
+
   archive-tests:
-    name: Sidecar metadata and archive tests
+    name: Sidecar metadata, ABI, and archive tests
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Run tests
-        run: python3 -m unittest test.test_sidecar_manifest test.test_sidecar_archive
+        run: |
+          python3 -m unittest \
+            test.test_linux_abi_report \
+            test.test_platform_abi_reports \
+            test.test_sidecar_manifest \
+            test.test_sidecar_archive \
+            test.test_sidecar_targets
 
   linux-guix:
-    name: Linux x86_64 Guix build ${{ matrix.reproducer }}
-    runs-on: ubuntu-24.04
+    name: ${{ matrix.triple }} Guix build ${{ matrix.reproducer }}
+    needs: targets
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 360
     strategy:
       fail-fast: false
-      matrix:
-        reproducer: [a, b]
+      matrix: ${{ fromJSON(needs.targets.outputs.linux) }}
 
     steps:
       - name: Checkout
@@ -70,36 +106,78 @@ jobs:
           sudo systemctl start guix-daemon
           guix --version
 
+      - name: Enable foreign-architecture execution
+        if: matrix.builder == 'guix-qemu-user'
+        env:
+          QEMU_BINFMT: ${{ matrix.qemu_binfmt }}
+        run: |
+          sudo apt-get install -y binfmt-support qemu-user-static
+          sudo systemctl restart systemd-binfmt
+          test -e "/proc/sys/fs/binfmt_misc/${QEMU_BINFMT}"
+          sudo mkdir -p /etc/systemd/system/guix-daemon.service.d
+          printf '%s\n' \
+            '[Service]' \
+            'ExecStart=' \
+            'ExecStart=/usr/bin/guix-daemon --build-users-group=guixbuild --disable-chroot' | \
+            sudo tee /etc/systemd/system/guix-daemon.service.d/qemu.conf
+          sudo systemctl daemon-reload
+          sudo systemctl restart guix-daemon
+
+      - name: Confirm native runner architecture
+        if: matrix.builder == 'guix'
+        env:
+          TARGET: ${{ matrix.triple }}
+        run: |
+          case "${TARGET}" in
+            x86_64-linux-gnu) test "$(uname -m)" = x86_64 ;;
+            aarch64-linux-gnu) test "$(uname -m)" = aarch64 ;;
+            *) exit 1 ;;
+          esac
+
       - name: Build unsigned sidecar
         env:
           HWI_GUIX_OUTPUT_DIR: dist/guix
-        run: |
-          test "$(uname -m)" = x86_64
-          contrib/guix/build-sidecar
+          HWI_TARGET: ${{ matrix.triple }}
+        run: contrib/guix/build-sidecar
 
-      - name: Preserve exact archive bytes
+      - name: Validate and preserve exact archive bytes
+        env:
+          ARCHITECTURE: ${{ matrix.architecture }}
+          ENDIANNESS: ${{ matrix.endianness }}
+          EXPECTED_INTERPRETER: ${{ matrix.expected_interpreter }}
+          GLIBC_MAXIMUM: ${{ matrix.glibc_maximum }}
+          MACHINE: ${{ matrix.machine }}
+          REPRODUCER: ${{ matrix.reproducer }}
+          TARGET: ${{ matrix.triple }}
         run: |
-          archive="$(find dist/guix -maxdepth 1 -type f -name 'hwi-*.tar.gz' -print -quit)"
+          archive="$(find dist/guix -maxdepth 1 -type f -name "hwi-*-${TARGET}.tar.gz" -print -quit)"
           test -n "${archive}"
           mkdir -p build-sidecar-abi
           tar -xzf "${archive}" -C build-sidecar-abi
           python3 contrib/linux_abi_report.py \
-            build-sidecar-abi/hwi --output build-sidecar-abi/report.json
-          ABI_REPORT=build-sidecar-abi/report.json python3 -c \
-            'import json, os; version=json.load(open(os.environ["ABI_REPORT"]))["maximum_glibc"]; assert version is not None and tuple(map(int, version.split("."))) <= (2, 35), version'
-          cp "${archive}" "hwi-linux-${{ matrix.reproducer }}.tar.gz"
-          sha256sum "hwi-linux-${{ matrix.reproducer }}.tar.gz"
+            build-sidecar-abi/hwi \
+            --expected-machine "${MACHINE}" \
+            --expected-endianness "${ENDIANNESS}" \
+            --expected-interpreter "${EXPECTED_INTERPRETER}" \
+            --maximum-glibc "${GLIBC_MAXIMUM}" \
+            --output build-sidecar-abi/report.json
+          cp "${archive}" "hwi-${TARGET}-${REPRODUCER}.tar.gz"
+          sha256sum "hwi-${TARGET}-${REPRODUCER}.tar.gz"
 
       - name: Upload exact archive
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          path: hwi-linux-${{ matrix.reproducer }}.tar.gz
-          archive: false
+          name: hwi-${{ matrix.triple }}-${{ matrix.reproducer }}
+          path: hwi-${{ matrix.triple }}-${{ matrix.reproducer }}.tar.gz
+          if-no-files-found: error
 
   linux-compare:
-    name: Compare Linux reproducers
-    needs: linux-guix
+    name: Compare ${{ matrix.triple }} Guix reproducers
+    needs: [targets, linux-guix]
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.targets.outputs.linux_compare) }}
     steps:
       - name: Checkout comparison tool
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -107,23 +185,25 @@ jobs:
       - name: Download exact archives
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          pattern: hwi-linux-*
+          pattern: hwi-${{ matrix.triple }}-*
           merge-multiple: true
 
       - name: Require bit-identical output
+        env:
+          TARGET: ${{ matrix.triple }}
         run: |
-          sha256sum hwi-linux-a.tar.gz hwi-linux-b.tar.gz
+          sha256sum "hwi-${TARGET}-a.tar.gz" "hwi-${TARGET}-b.tar.gz"
           python3 contrib/compare_sidecar_archives.py \
-            hwi-linux-a.tar.gz hwi-linux-b.tar.gz
+            "hwi-${TARGET}-a.tar.gz" "hwi-${TARGET}-b.tar.gz"
 
-  macos-arm64:
-    name: macOS arm64 determinism build ${{ matrix.reproducer }}
-    runs-on: macos-15
+  macos:
+    name: ${{ matrix.triple }} build ${{ matrix.reproducer }}
+    needs: targets
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
     strategy:
       fail-fast: false
-      matrix:
-        reproducer: [a, b]
+      matrix: ${{ fromJSON(needs.targets.outputs.macos) }}
 
     steps:
       - name: Checkout
@@ -137,32 +217,37 @@ jobs:
           python-version: "3.12.10"
 
       - name: Set deterministic build environment
+        env:
+          ARCHITECTURE: ${{ matrix.architecture }}
         run: |
-          test "$(uname -m)" = arm64
+          test "$(uname -m)" = "${ARCHITECTURE}"
           echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" >> "${GITHUB_ENV}"
           echo "MACOSX_DEPLOYMENT_TARGET=14.0" >> "${GITHUB_ENV}"
-          echo "PYINSTALLER_CONFIG_DIR=${RUNNER_TEMP}/hwi-pyinstaller" >> "${GITHUB_ENV}"
+          echo "PYINSTALLER_CONFIG_DIR=/tmp/hwi-pyinstaller" >> "${GITHUB_ENV}"
 
-      - name: Build pinned libusb
+      - name: Build pinned reproducible libusb
         run: |
+          rm -rf /tmp/hwi-libusb-source /tmp/hwi-libusb-stage /tmp/hwi-libusb.tar.bz2
           curl --fail --location --silent --show-error \
             https://github.com/libusb/libusb/releases/download/v1.0.29/libusb-1.0.29.tar.bz2 \
-            --output "${RUNNER_TEMP}/libusb.tar.bz2"
-          echo "5977fc950f8d1395ccea9bd48c06b3f808fd3c2c961b44b0c2e6e29fc3a70a85  ${RUNNER_TEMP}/libusb.tar.bz2" | shasum -a 256 --check
-          mkdir -p "${RUNNER_TEMP}/libusb-source" "${RUNNER_TEMP}/libusb-stage"
-          tar -xjf "${RUNNER_TEMP}/libusb.tar.bz2" \
-            -C "${RUNNER_TEMP}/libusb-source" --strip-components=1
+            --output /tmp/hwi-libusb.tar.bz2
+          echo "5977fc950f8d1395ccea9bd48c06b3f808fd3c2c961b44b0c2e6e29fc3a70a85  /tmp/hwi-libusb.tar.bz2" | \
+            shasum -a 256 --check
+          mkdir -p /tmp/hwi-libusb-source /tmp/hwi-libusb-stage
+          tar -xjf /tmp/hwi-libusb.tar.bz2 -C /tmp/hwi-libusb-source --strip-components=1
           (
-            cd "${RUNNER_TEMP}/libusb-source"
+            cd /tmp/hwi-libusb-source
+            CFLAGS="-O2 -ffile-prefix-map=/tmp/hwi-libusb-source=/usr/src/libusb" \
+            LDFLAGS="-Wl,-no_uuid" \
             ./configure \
               --prefix=/hwi-libusb \
               --disable-dependency-tracking \
               --disable-static \
               --enable-shared
             make -j"$(sysctl -n hw.logicalcpu)"
-            make install DESTDIR="${RUNNER_TEMP}/libusb-stage"
+            make install DESTDIR=/tmp/hwi-libusb-stage
           )
-          echo "HWI_LIBUSB_PATH=${RUNNER_TEMP}/libusb-stage/hwi-libusb/lib/libusb-1.0.dylib" >> "${GITHUB_ENV}"
+          echo "HWI_LIBUSB_PATH=/tmp/hwi-libusb-stage/hwi-libusb/lib/libusb-1.0.dylib" >> "${GITHUB_ENV}"
 
       - name: Install locked HWI build environment
         run: |
@@ -171,26 +256,40 @@ jobs:
           poetry install --sync --no-interaction
 
       - name: Build and finalize unsigned sidecar
+        env:
+          ARCHITECTURE: ${{ matrix.architecture }}
+          MAXIMUM_MACOS: ${{ matrix.minimum_macos }}
+          REPRODUCER: ${{ matrix.reproducer }}
+          TARGET: ${{ matrix.triple }}
         run: |
           contrib/build_sidecar.sh
           poetry run python contrib/macos_ad_hoc_sign.py dist/hwi
+          poetry run python contrib/macos_abi_report.py \
+            dist/hwi \
+            --architecture "${ARCHITECTURE}" \
+            --maximum-macos "${MAXIMUM_MACOS}" \
+            --output dist/hwi-macos-abi.json
           poetry run python contrib/generate_sidecar_manifest.py \
-            dist/hwi --platform macos --architecture arm64
+            dist/hwi --platform macos --architecture "${ARCHITECTURE}"
           poetry run python contrib/package_sidecar.py \
-            dist/hwi "hwi-macos-${{ matrix.reproducer }}.tar.gz"
+            dist/hwi "hwi-${TARGET}-${REPRODUCER}.tar.gz"
           dist/hwi/hwi --version
-          shasum -a 256 "hwi-macos-${{ matrix.reproducer }}.tar.gz"
+          shasum -a 256 "hwi-${TARGET}-${REPRODUCER}.tar.gz"
 
       - name: Upload exact archive
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          path: hwi-macos-${{ matrix.reproducer }}.tar.gz
-          archive: false
+          name: hwi-${{ matrix.triple }}-${{ matrix.reproducer }}
+          path: hwi-${{ matrix.triple }}-${{ matrix.reproducer }}.tar.gz
+          if-no-files-found: error
 
   macos-compare:
-    name: Compare macOS determinism builds
-    needs: macos-arm64
+    name: Compare ${{ matrix.triple }} reproducers
+    needs: [targets, macos]
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.targets.outputs.macos_compare) }}
     steps:
       - name: Checkout comparison tool
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -198,11 +297,135 @@ jobs:
       - name: Download exact archives
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          pattern: hwi-macos-*
+          pattern: hwi-${{ matrix.triple }}-*
           merge-multiple: true
 
       - name: Require bit-identical output
+        env:
+          TARGET: ${{ matrix.triple }}
         run: |
-          sha256sum hwi-macos-a.tar.gz hwi-macos-b.tar.gz
+          sha256sum "hwi-${TARGET}-a.tar.gz" "hwi-${TARGET}-b.tar.gz"
           python3 contrib/compare_sidecar_archives.py \
-            hwi-macos-a.tar.gz hwi-macos-b.tar.gz
+            "hwi-${TARGET}-a.tar.gz" "hwi-${TARGET}-b.tar.gz"
+
+  windows:
+    name: ${{ matrix.triple }} build ${{ matrix.reproducer }}
+    needs: targets
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.targets.outputs.windows) }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Select pinned Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12.10"
+
+      - name: Set deterministic build environment
+        shell: pwsh
+        run: |
+          if ($env:PROCESSOR_ARCHITECTURE -ne "AMD64") { throw "Expected AMD64 runner" }
+          "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "PYINSTALLER_CONFIG_DIR=$env:RUNNER_TEMP\hwi-pyinstaller" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Install pinned libusb
+        shell: pwsh
+        run: |
+          $archive = "$env:RUNNER_TEMP\libusb-1.0.29.7z"
+          $source = "$env:RUNNER_TEMP\libusb-1.0.29"
+          curl.exe --fail --location --silent --show-error `
+            https://github.com/libusb/libusb/releases/download/v1.0.29/libusb-1.0.29.7z `
+            --output $archive
+          $actual = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLower()
+          if ($actual -ne "964a38152ca9a104cd00ec8d2f0617b89cd814f9b635e29763c68563d951521d") {
+            throw "libusb archive hash mismatch: $actual"
+          }
+          7z x -y "-o$source" $archive "MinGW64/dll/libusb-1.0.dll"
+          "HWI_LIBUSB_PATH=$source\MinGW64\dll\libusb-1.0.dll" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Install locked HWI build environment
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check "poetry==2.3.1"
+          poetry config virtualenvs.in-project true --local
+          poetry install --sync --no-interaction
+
+      - name: Build and finalize unsigned sidecar
+        shell: pwsh
+        env:
+          ARCHITECTURE: ${{ matrix.architecture }}
+          REPRODUCER: ${{ matrix.reproducer }}
+          TARGET: ${{ matrix.triple }}
+        run: |
+          poetry run pyinstaller --clean --noconfirm hwi-sidecar.spec
+          poetry run python contrib/generate_sidecar_manifest.py `
+            dist/hwi --platform windows --architecture $env:ARCHITECTURE
+          poetry run python contrib/windows_abi_report.py `
+            dist/hwi --architecture $env:ARCHITECTURE --output dist/hwi-windows-abi.json
+          poetry run python contrib/package_sidecar.py `
+            dist/hwi "hwi-$env:TARGET-$env:REPRODUCER.tar.gz"
+          & dist/hwi/hwi.exe --version
+          Get-FileHash -Algorithm SHA256 "hwi-$env:TARGET-$env:REPRODUCER.tar.gz"
+
+      - name: Upload exact archive
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: hwi-${{ matrix.triple }}-${{ matrix.reproducer }}
+          path: hwi-${{ matrix.triple }}-${{ matrix.reproducer }}.tar.gz
+          if-no-files-found: error
+
+  windows-compare:
+    name: Compare ${{ matrix.triple }} reproducers
+    needs: [targets, windows]
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix: ${{ fromJSON(needs.targets.outputs.windows_compare) }}
+    steps:
+      - name: Checkout comparison tool
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Download exact archives
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: hwi-${{ matrix.triple }}-*
+          merge-multiple: true
+
+      - name: Require bit-identical output
+        env:
+          TARGET: ${{ matrix.triple }}
+        run: |
+          sha256sum "hwi-${TARGET}-a.tar.gz" "hwi-${TARGET}-b.tar.gz"
+          python3 contrib/compare_sidecar_archives.py \
+            "hwi-${TARGET}-a.tar.gz" "hwi-${TARGET}-b.tar.gz"
+
+  bundle-set:
+    name: Assemble verified sidecar bundle set
+    needs: [archive-tests, linux-compare, macos-compare, windows-compare]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download reproduced archives
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: hwi-*-a
+          merge-multiple: true
+
+      - name: Create checksums
+        run: |
+          sha256sum hwi-*.tar.gz | sort -k2 > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Upload verified bundle set
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: hwi-sidecar-bundles-${{ github.sha }}
+          path: |
+            hwi-*.tar.gz
+            SHA256SUMS
+          if-no-files-found: error

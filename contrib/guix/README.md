@@ -1,49 +1,92 @@
 # Reproducible HWI sidecar builds
 
-The Guix package in this directory is the authoritative Linux x86_64 sidecar
-builder. It pins the complete Guix package universe, obtains Python packages
-from Guix rather than Poetry or PyPI during the build, compiles the PyInstaller
-bootloader from source, creates the unsigned canonical HWI manifest, and emits
-a normalized archive. The complete package graph is rewritten to Guix's pinned
-glibc 2.35 variant so a rolling Guix libc cannot silently raise the runtime ABI
-requirement.
+HWI owns the sidecar artifacts. Bitcoin Core consumes a released archive only
+after checking its pinned archive hash, canonical manifest, and maintainer
+signature. Private release keys are deliberately absent from these builders.
 
-Run it from a clean HWI checkout with a working Guix daemon:
+`sidecar-targets.json` is the target contract shared with CI. It lists every
+target shipped by Bitcoin Core, the native or emulated execution environment,
+and the ABI values that must be measured from the finished bundle. CI builds
+each hosted target twice and accepts it only when the canonical archives are
+byte-for-byte identical.
+
+## Linux and Guix
+
+The Guix package pins the complete package universe, obtains Python packages
+from Guix rather than PyPI during the build, compiles the PyInstaller
+bootloader from source, and creates the normalized unsigned archive. Its
+package graph is rewritten to the same glibc 2.31 source and patches used by
+Bitcoin Core. The post-build check inspects every ELF file and enforces:
+
+- the target machine and endianness;
+- the target's standard ELF interpreter;
+- a maximum `GLIBC_2.31` symbol requirement; and
+- successful execution of `hwi --version` in the target environment.
+
+Run the native x86_64 build from a clean checkout with a working Guix daemon:
 
 ```sh
 contrib/guix/build-sidecar
 ```
 
-To rebuild all inputs rather than accepting signed substitutes:
+Select another supported Guix system with its Bitcoin Core target triple:
+
+```sh
+HWI_TARGET=aarch64-linux-gnu contrib/guix/build-sidecar
+```
+
+The supported Guix targets are `x86_64-linux-gnu`,
+`arm-linux-gnueabihf`, `aarch64-linux-gnu`, and `riscv64-linux-gnu`.
+PyInstaller is not a cross-compiler, so the selected target Python,
+extensions, bootloader, collection pass, and runtime test must execute
+natively or through binfmt/QEMU. The GitHub workflow uses native hosted
+runners where available and QEMU-user for ARMv7 and RISC-V. For emulated Guix
+builds it disables the Guix build chroot only so the kernel can reach the
+host's pinned QEMU interpreter; the Guix package closure remains pinned and
+the two independent output archives still have to match exactly.
+
+To rebuild all inputs rather than accepting signed Guix substitutes:
 
 ```sh
 HWI_GUIX_BUILD_FLAGS=--no-substitutes contrib/guix/build-sidecar
 ```
 
-The output and its SHA256 file are written under `dist/guix`. Private release
-keys are deliberately absent from this build. Maintainers must reproduce the
-unsigned archive before the protected release process authorizes its canonical
-manifest and assembles the final release archive.
+The archive and its SHA256 file are written under `dist/guix`.
 
 ## Target status
 
-| Bitcoin Core target | Sidecar builder | Native or emulated runtime needed |
+| Bitcoin Core target | Builder used by HWI | CI execution environment |
 |---|---|---|
-| `x86_64-linux-gnu` | Implemented with Guix | x86_64 Linux |
-| `arm-linux-gnueabihf` | Not implemented | ARMv7 Linux or full-system QEMU |
-| `aarch64-linux-gnu` | Not implemented | ARM64 Linux or full-system QEMU |
-| `riscv64-linux-gnu` | Not implemented | RISC-V Linux or full-system QEMU |
-| `powerpc64-linux-gnu` | Not implemented | Big-endian POWER Linux or full-system QEMU |
-| `x86_64-w64-mingw32` | Not implemented for the sidecar | Windows x64 or the existing Wine environment |
-| `x86_64-apple-darwin` | Not implemented | Intel macOS or a complete universal2 environment |
-| `arm64-apple-darwin` | Determinism CI only | Apple-silicon macOS |
+| `x86_64-linux-gnu` | Guix, glibc 2.31 | Native GitHub x86_64 Linux |
+| `arm-linux-gnueabihf` | Guix, glibc 2.31 | GitHub ARM64 Linux with QEMU-user ARM |
+| `aarch64-linux-gnu` | Guix, glibc 2.31 | Native GitHub ARM64 Linux |
+| `riscv64-linux-gnu` | Guix, glibc 2.31 | GitHub x86_64 Linux with QEMU-user RISC-V |
+| `powerpc64-linux-gnu` | Native glibc 2.31 builder required | Blocked on a pinned big-endian ppc64 runner or QEMU image |
+| `x86_64-w64-mingw32` | Native PyInstaller plus pinned libusb | Native GitHub Windows x64 |
+| `x86_64-apple-darwin` | Native PyInstaller plus source-built libusb | Native GitHub Intel macOS |
+| `arm64-apple-darwin` | Native PyInstaller plus source-built libusb | Native GitHub Apple-silicon macOS |
 
-PyInstaller is not a cross-compiler. Adding a Guix cross toolchain alone is not
-enough for the non-native targets: the target Python interpreter, extension
-modules, PyInstaller bootloader, collection pass, and runtime test must all be
-executed in the corresponding target environment.
+Big-endian POWER is not silently replaced with `powerpc64le-linux-gnu`.
+Guix supports `powerpc64le-linux` but not Bitcoin Core's big-endian
+`powerpc64-linux-gnu` target, and GitHub does not publish a ppc64 hosted
+runner. That target remains in the machine-readable contract so a release
+cannot accidentally claim complete Core coverage. Enabling it requires two
+independent, pinned ppc64 environments that pass the same ELF and glibc 2.31
+checks.
 
-The macOS CI lane therefore checks deterministic native assembly separately.
-Official Developer ID signatures and notarization are applied only after the
-unsigned tree reproduces. Those Apple-authorized final bytes are verified by
-signature and manifest rather than expected to reproduce bit-for-bit.
+## macOS and Windows
+
+The macOS jobs build both Intel and Apple-silicon archives. libusb is built at
+a fixed source path with path remapping and without a Mach-O UUID, then every
+Mach-O file is checked for the expected architecture and a deployment target
+no newer than Core's macOS 14.0 floor. The unsigned tree is ad-hoc signed only
+to make it runnable; official Developer ID signatures and notarization remain
+a protected post-reproduction release step.
+
+The Windows job uses pinned Python and libusb inputs, validates every PE file
+as x86_64, executes the finished sidecar, and packages it with the same
+canonical manifest and archive code used on Unix.
+
+Successful CI publishes one `hwi-<target>-<reproducer>` artifact per build and
+a `hwi-sidecar-bundles-<commit>` artifact containing one verified archive per
+hosted target plus `SHA256SUMS`.

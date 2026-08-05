@@ -134,6 +134,21 @@ class SidecarArchiveTest(unittest.TestCase):
                 [],
             )
 
+    def test_windows_entrypoint_is_normalized_executable(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            bundle = root / "bundle"
+            bundle.mkdir()
+            (bundle / "hwi.exe").write_bytes(b"executable")
+            manifest = manifest_module.build_manifest(bundle, "windows", "x86_64")
+            (bundle / manifest_module.MANIFEST_NAME).write_bytes(
+                manifest_module.canonical_json(manifest)
+            )
+            archive_path = root / "windows.tar.gz"
+            package_module.package_bundle(bundle, archive_path, 0)
+            with tarfile.open(archive_path, "r:gz") as archive:
+                self.assertEqual(archive.getmember("hwi/hwi.exe").mode, 0o755)
+
 
 if __name__ == "__main__":
     unittest.main()
