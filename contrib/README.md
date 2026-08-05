@@ -22,6 +22,19 @@ HWI_LIBUSB_PATH=/path/to/libusb-1.0.so.0 contrib/build_sidecar.sh
 On macOS, use the path to `libusb-1.0.dylib`. The resulting unsigned bundle is
 written to `dist/hwi`.
 
+`package_sidecar.py` validates that the bundle still matches its canonical
+manifest and packages it with normalized ordering, ownership, permissions,
+timestamps, and gzip metadata while preserving PyInstaller symlinks:
+
+```sh
+SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)" \
+  poetry run python contrib/package_sidecar.py \
+    dist/hwi dist/hwi-sidecar.tar.gz
+```
+
+The authoritative Linux x86_64 builder and the current target-support matrix
+are documented in `guix/README.md`.
+
 ## `build_dist.sh`
 
 Creates a virtualenv with the locked dependencies using Poetry. Then uses Poetry to produce deterministic builds of the wheel and sdist for upload to PyPi

@@ -9,9 +9,14 @@ import hashlib
 import json
 import platform
 from pathlib import Path
+import sys
 from typing import Any, Dict, List
 
-from hwilib import __version__ as HWI_VERSION
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from hwilib import __version__ as HWI_VERSION  # noqa: E402
 
 
 MANIFEST_NAME = "hwi-manifest.json"
