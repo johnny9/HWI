@@ -169,14 +169,7 @@ jobs:
           sudo apt-get install -y binfmt-support qemu-user-static
           sudo systemctl restart systemd-binfmt
           test -e "/proc/sys/fs/binfmt_misc/${QEMU_BINFMT}"
-          sudo mkdir -p /etc/systemd/system/guix-daemon.service.d
-          printf '%s\n' \
-            '[Service]' \
-            'ExecStart=' \
-            'ExecStart=/var/guix/profiles/per-user/root/current-guix/bin/guix-daemon --disable-chroot --discover=no' | \
-            sudo tee /etc/systemd/system/guix-daemon.service.d/qemu.conf
-          sudo systemctl daemon-reload
-          sudo systemctl restart guix-daemon
+          grep -q '^flags:.*F' "/proc/sys/fs/binfmt_misc/${QEMU_BINFMT}"
 
       - name: Confirm native runner architecture
         if: matrix.builder == 'guix'

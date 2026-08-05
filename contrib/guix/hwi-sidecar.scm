@@ -160,7 +160,7 @@
           (add-before 'build 'compile-bootloader-from-source
             (lambda _
               (setenv "PYINSTALLER_COMPILE_BOOTLOADER" "1"))))))
-    (native-inputs (list python-setuptools python-wheel))
+    (native-inputs (list python-setuptools python-wheel zlib))
     (propagated-inputs
      (list python-altgraph
            python-packaging
