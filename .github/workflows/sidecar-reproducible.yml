@@ -6,6 +6,7 @@ on:
       - ".github/workflows/sidecar-reproducible.yml"
       - "contrib/guix/**"
       - "contrib/build_sidecar.sh"
+      - "contrib/compare_sidecar_archives.py"
       - "contrib/generate_sidecar_manifest.py"
       - "contrib/linux_abi_report.py"
       - "contrib/macos_ad_hoc_sign.py"
@@ -108,8 +109,9 @@ jobs:
 
       - name: Require bit-identical output
         run: |
-          cmp hwi-linux-a.tar.gz hwi-linux-b.tar.gz
           sha256sum hwi-linux-a.tar.gz hwi-linux-b.tar.gz
+          python3 contrib/compare_sidecar_archives.py \
+            hwi-linux-a.tar.gz hwi-linux-b.tar.gz
 
   macos-arm64:
     name: macOS arm64 determinism build ${{ matrix.reproducer }}
@@ -195,5 +197,6 @@ jobs:
 
       - name: Require bit-identical output
         run: |
-          cmp hwi-macos-a.tar.gz hwi-macos-b.tar.gz
           sha256sum hwi-macos-a.tar.gz hwi-macos-b.tar.gz
+          python3 contrib/compare_sidecar_archives.py \
+            hwi-macos-a.tar.gz hwi-macos-b.tar.gz

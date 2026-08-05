@@ -29,6 +29,10 @@ manifest_module = load_module(
     CONTRIB / "generate_sidecar_manifest.py",
 )
 package_module = load_module("package_sidecar", CONTRIB / "package_sidecar.py")
+compare_module = load_module(
+    "compare_sidecar_archives",
+    CONTRIB / "compare_sidecar_archives.py",
+)
 
 
 class SidecarArchiveTest(unittest.TestCase):
@@ -95,6 +99,40 @@ class SidecarArchiveTest(unittest.TestCase):
             (bundle / "hwi").chmod(0o644)
             with self.assertRaisesRegex(ValueError, "not executable"):
                 package_module.package_bundle(bundle, root / "out.tar.gz", 0)
+
+    def test_archive_comparison_identifies_changed_member(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            bundle = self.make_bundle(root)
+            first = root / "first.tar.gz"
+            second = root / "second.tar.gz"
+            package_module.package_bundle(bundle, first, 0)
+
+            (bundle / "_internal" / "module.pyz").write_bytes(b"changed")
+            manifest = manifest_module.build_manifest(bundle, "linux", "x86_64")
+            (bundle / manifest_module.MANIFEST_NAME).write_bytes(
+                manifest_module.canonical_json(manifest)
+            )
+            package_module.package_bundle(bundle, second, 0)
+
+            differences = compare_module.compare_archives(first, second)
+            self.assertTrue(
+                any("hwi/_internal/module.pyz" in item for item in differences)
+            )
+            self.assertTrue(
+                any("hwi/hwi-manifest.json" in item for item in differences)
+            )
+
+    def test_archive_comparison_accepts_identical_bytes(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            bundle = self.make_bundle(root)
+            archive = root / "archive.tar.gz"
+            package_module.package_bundle(bundle, archive, 0)
+            self.assertEqual(
+                compare_module.compare_archives(archive, archive),
+                [],
+            )
 
 
 if __name__ == "__main__":
