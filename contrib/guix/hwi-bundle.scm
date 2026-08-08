@@ -567,13 +567,11 @@ application bundles.  This variant always compiles its bootloader from source.")
                                    "-" #$target-triple ".tar.gz")))
               (mkdir-p #$output)
               (copy-recursively "dist/hwi" installed-bundle)
-              ;; Guix 1.5's AppArmor profile forbids executing files created
-              ;; under /tmp, but permits execution from the store output.
               ;; Probe the exact installed entry point rather than the copy in
-              ;; the fixed, reproducible PyInstaller build directory.  Patch
-              ;; in the store loader only for the probe: invoking ld-linux as
-              ;; the program makes PyInstaller resolve /proc/self/exe to the
-              ;; loader and prevents it from finding its appended archive.
+              ;; the PyInstaller build directory.  Patch in the store loader
+              ;; only for the probe: invoking ld-linux as the program makes
+              ;; PyInstaller resolve /proc/self/exe to the loader and prevents
+              ;; it from finding its appended archive.
               (invoke "patchelf"
                       "--set-interpreter" build-interpreter
                       installed-entrypoint)

@@ -18,9 +18,9 @@ bootloader from source, and creates the normalized unsigned archive. The
 launcher is rewritten to the target's conventional ELF interpreter and an
 `$ORIGIN/_internal` runpath before it is manifested. Its package graph is
 rewritten to the same glibc 2.31 source and patches used by Bitcoin Core. The
-runtime probe executes the installed launcher through that pinned glibc's
-store loader, avoiding Guix 1.5's AppArmor prohibition on executing build-tree
-files under `/tmp`. The post-build checks enforce:
+runtime probe executes the installed launcher with that pinned glibc's store
+loader, then restores the target's conventional loader before packaging. The
+post-build checks enforce:
 
 - the target machine and endianness;
 - the target's standard ELF interpreter;
