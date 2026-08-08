@@ -127,19 +127,28 @@ jobs:
           signature="${archive}.sig"
           release_key="${RUNNER_TEMP}/guix-release-key.gpg"
           keyring="${RUNNER_TEMP}/guix-release-keyring"
+          curl_args=(
+            --connect-timeout 30
+            --fail
+            --location
+            --retry 5
+            --retry-all-errors
+            --show-error
+            --silent
+          )
 
-          curl --fail --location --silent --show-error \
+          curl "${curl_args[@]}" \
             "https://codeberg.org/guix/guix/raw/tag/v${GUIX_VERSION}/etc/guix-install.sh" \
             --output "${installer}"
           echo "${GUIX_INSTALLER_SHA256}  ${installer}" | sha256sum --check
-          curl --fail --location --silent --show-error \
+          curl "${curl_args[@]}" \
             "https://ftp.gnu.org/gnu/guix/$(basename "${archive}")" \
             --output "${archive}"
           echo "${guix_archive_sha256}  ${archive}" | sha256sum --check
-          curl --fail --location --silent --show-error \
+          curl "${curl_args[@]}" \
             "https://ftp.gnu.org/gnu/guix/$(basename "${signature}")" \
             --output "${signature}"
-          curl --fail --location --silent --show-error \
+          curl "${curl_args[@]}" \
             https://codeberg.org/efraim.gpg --output "${release_key}"
 
           fingerprint="$(
@@ -165,7 +174,7 @@ jobs:
           QEMU_BINFMT: ${{ matrix.qemu_binfmt }}
         run: |
           sudo apt-get install -y binfmt-support qemu-user-static
-          sudo systemctl restart systemd-binfmt
+          sudo update-binfmts --import "${QEMU_BINFMT}"
           test -e "/proc/sys/fs/binfmt_misc/${QEMU_BINFMT}"
           grep -q '^flags:.*F' "/proc/sys/fs/binfmt_misc/${QEMU_BINFMT}"
 
