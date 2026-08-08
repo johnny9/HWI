@@ -151,29 +151,12 @@ jobs:
           gpg --homedir "${keyring}" --batch --import "${release_key}"
           gpg --homedir "${keyring}" --batch --verify "${signature}" "${archive}"
 
-          # The official installer documents a stream of empty answers as its
-          # supported noninteractive mode. Disable pipefail only so yes(1)'s
-          # expected SIGPIPE does not mask the installer's exit status.
-          set +o pipefail
-          yes '' | sudo env "GUIX_BINARY_FILE_NAME=${archive}" bash "${installer}"
-          set -o pipefail
+          # Continue installation, decline Guix 1.5.0's AppArmor profiles,
+          # then accept the remaining defaults. Ubuntu 22.04 does not require
+          # those profiles, and its parser does not provide their abi/4.0.
+          printf '\nn\n\n\n\n' | \
+            sudo env "GUIX_BINARY_FILE_NAME=${archive}" bash "${installer}"
           hash -r
-
-          # Guix 1.5.0's daemon profile prevents download helpers and builders
-          # from accessing required host paths. Run the daemon without that
-          # incomplete profile on this disposable VM.
-          if [[ -f /etc/apparmor.d/guix-daemon ]]; then
-            sudo systemctl stop guix-daemon
-            sudo apparmor_parser --remove /etc/apparmor.d/guix-daemon
-            sudo rm -f /etc/apparmor.d/guix-daemon
-          fi
-
-          sudo systemctl restart guix-daemon
-          if sudo test -e /sys/kernel/security/apparmor/profiles &&
-             sudo grep -Eq '^guix-daemon(//| )' /sys/kernel/security/apparmor/profiles; then
-            echo "Guix daemon is still confined by AppArmor" >&2
-            exit 1
-          fi
           guix --version
 
       - name: Enable foreign-architecture execution
