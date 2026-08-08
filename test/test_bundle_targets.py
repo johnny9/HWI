@@ -38,6 +38,19 @@ class BundleTargetsTest(unittest.TestCase):
         self.assertEqual(len(rows), 4)
         self.assertEqual({row["reproducer"] for row in rows}, {"a", "b"})
 
+    def test_guix_targets_use_ubuntu_22_04(self):
+        targets = targets_module.load_targets()
+        guix = [target for target in targets if target["group"] == "linux-guix"]
+        self.assertEqual(
+            {target["triple"]: target["runner"] for target in guix},
+            {
+                "x86_64-linux-gnu": "ubuntu-22.04",
+                "arm-linux-gnueabihf": "ubuntu-22.04",
+                "aarch64-linux-gnu": "ubuntu-22.04-arm",
+                "riscv64-linux-gnu": "ubuntu-22.04",
+            },
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

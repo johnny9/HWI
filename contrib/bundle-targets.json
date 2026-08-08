@@ -12,7 +12,7 @@
       "hosted": true,
       "machine": "x86_64",
       "platform": "linux",
-      "runner": "ubuntu-24.04",
+      "runner": "ubuntu-22.04",
       "triple": "x86_64-linux-gnu"
     },
     {
@@ -27,7 +27,7 @@
       "machine": "arm",
       "platform": "linux",
       "qemu_binfmt": "qemu-arm",
-      "runner": "ubuntu-24.04",
+      "runner": "ubuntu-22.04",
       "triple": "arm-linux-gnueabihf"
     },
     {
@@ -41,7 +41,7 @@
       "hosted": true,
       "machine": "aarch64",
       "platform": "linux",
-      "runner": "ubuntu-24.04-arm",
+      "runner": "ubuntu-22.04-arm",
       "triple": "aarch64-linux-gnu"
     },
     {
@@ -56,7 +56,7 @@
       "machine": "riscv64",
       "platform": "linux",
       "qemu_binfmt": "qemu-riscv64",
-      "runner": "ubuntu-24.04",
+      "runner": "ubuntu-22.04",
       "triple": "riscv64-linux-gnu"
     },
     {
