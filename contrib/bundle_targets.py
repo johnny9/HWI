@@ -7,6 +7,7 @@
 import argparse
 import json
 from pathlib import Path
+import re
 from typing import Any, Dict, Iterable, List
 
 
@@ -21,6 +22,7 @@ CORE_TARGETS = {
     "x86_64-linux-gnu",
     "x86_64-w64-mingw32",
 }
+OCI_DIGEST_PATTERN = re.compile(r"^.+@sha256:[0-9a-f]{64}$")
 
 
 def load_targets(path: Path = TARGETS_PATH) -> List[Dict[str, Any]]:
@@ -58,8 +60,15 @@ def validate_targets(targets: List[Dict[str, Any]]) -> None:
         require_fields(target, linux if target.get("platform") == "linux" else common)
         if target.get("platform") == "linux" and target["glibc_maximum"] != "2.31":
             raise ValueError(f"{target['triple']}: Linux GLIBC maximum must be 2.31")
-        if target["group"] == "linux-guix":
-            require_fields(target, ("guix_system",))
+        if target["group"] == "linux-oci":
+            require_fields(
+                target,
+                ("debian_snapshot", "oci_image", "python_version"),
+            )
+            if target["builder"] != "oci":
+                raise ValueError(f"{target['triple']}: Linux OCI target must use OCI builder")
+            if not OCI_DIGEST_PATTERN.fullmatch(target["oci_image"]):
+                raise ValueError(f"{target['triple']}: OCI image must be pinned by SHA256 digest")
 
 
 def build_matrix(
@@ -82,7 +91,7 @@ def build_matrix(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--matrix", choices=("linux-guix", "macos", "windows"))
+    parser.add_argument("--matrix", choices=("linux-oci", "macos", "windows"))
     parser.add_argument("--reproducers", default="a,b")
     args = parser.parse_args()
 

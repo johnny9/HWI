@@ -33,8 +33,9 @@ SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)" \
     dist/hwi dist/hwi-bundle.tar.gz
 ```
 
-The authoritative Guix builder, Bitcoin Core target contract, hosted CI
-coverage, and big-endian POWER exception are documented in `guix/README.md`.
+The authoritative OCI builder, Bitcoin Core target contract, hosted CI
+coverage, and unavailable architecture exceptions are documented in
+`oci/README.md`.
 
 ## `build_dist.sh`
 

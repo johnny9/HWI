@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# Build and validate an HWI Linux bundle inside the pinned OCI environment.
+
+export LC_ALL=C
+export LANG=C
+export POETRY_VIRTUALENVS_IN_PROJECT=true
+export PYTHONHASHSEED=0
+export PYTHONNOUSERSITE=1
+export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1546300800}"
+
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repository_root="$(cd "${script_dir}/../.." && pwd)"
+target="${HWI_TARGET:-}"
+
+case "${target}" in
+    x86_64-linux-gnu)
+        expected_uname=x86_64
+        architecture=x86_64
+        machine=x86_64
+        interpreter=/lib64/ld-linux-x86-64.so.2
+        ;;
+    aarch64-linux-gnu)
+        expected_uname=aarch64
+        architecture=aarch64
+        machine=aarch64
+        interpreter=/lib/ld-linux-aarch64.so.1
+        ;;
+    *)
+        echo "Unsupported hosted OCI HWI target: ${target:-<unset>}" >&2
+        exit 1
+        ;;
+esac
+
+if [[ "$(uname -m)" != "${expected_uname}" ]]; then
+    echo "Target ${target} cannot be built on $(uname -m)" >&2
+    exit 1
+fi
+if [[ "$(python -c 'import platform; print(platform.python_version())')" != "3.12.10" ]]; then
+    echo "The OCI build requires Python 3.12.10" >&2
+    exit 1
+fi
+if [[ "$(ldd --version | sed -n '1s/.* //p')" != "2.31" ]]; then
+    echo "The OCI build requires the glibc 2.31 baseline" >&2
+    exit 1
+fi
+
+libusb_path="$(ldconfig -p | awk '/libusb-1\.0\.so\.0/{print $NF; exit}')"
+if [[ -z "${libusb_path}" || ! -f "${libusb_path}" ]]; then
+    echo "The pinned libusb runtime was not found" >&2
+    exit 1
+fi
+export HWI_LIBUSB_PATH="${libusb_path}"
+export PYINSTALLER_CONFIG_DIR="/tmp/hwi-pyinstaller"
+
+cd "${repository_root}"
+contrib/build_bundle.sh
+dist/hwi/hwi --version
+
+version="$(python -c \
+    'import pathlib, tomllib; print(tomllib.loads(pathlib.Path("pyproject.toml").read_text())["tool"]["poetry"]["version"])')"
+output_dir="${HWI_OCI_OUTPUT_DIR:-${repository_root}/dist/oci}"
+archive="${output_dir}/hwi-${version}-${target}.tar.gz"
+mkdir -p "${output_dir}"
+
+python contrib/linux_abi_report.py \
+    dist/hwi \
+    --expected-machine "${machine}" \
+    --expected-endianness little \
+    --expected-interpreter "${interpreter}" \
+    --maximum-glibc 2.31 \
+    --output "${output_dir}/hwi-${target}-abi.json"
+python contrib/generate_bundle_manifest.py \
+    dist/hwi --platform linux --architecture "${architecture}"
+python contrib/package_bundle.py \
+    dist/hwi "${archive}" --source-date-epoch "${SOURCE_DATE_EPOCH}"
+sha256sum "${archive}"

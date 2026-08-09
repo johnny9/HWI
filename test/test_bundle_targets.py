@@ -38,17 +38,41 @@ class BundleTargetsTest(unittest.TestCase):
         self.assertEqual(len(rows), 4)
         self.assertEqual({row["reproducer"] for row in rows}, {"a", "b"})
 
-    def test_guix_targets_use_ubuntu_22_04(self):
+    def test_oci_targets_are_native_and_digest_pinned(self):
         targets = targets_module.load_targets()
-        guix = [target for target in targets if target["group"] == "linux-guix"]
+        oci = [target for target in targets if target["group"] == "linux-oci"]
         self.assertEqual(
-            {target["triple"]: target["runner"] for target in guix},
+            {target["triple"]: target["runner"] for target in oci},
             {
                 "x86_64-linux-gnu": "ubuntu-22.04",
-                "arm-linux-gnueabihf": "ubuntu-22.04",
                 "aarch64-linux-gnu": "ubuntu-22.04-arm",
-                "riscv64-linux-gnu": "ubuntu-22.04",
             },
+        )
+        self.assertTrue(all(target["builder"] == "oci" for target in oci))
+        self.assertTrue(
+            all(
+                targets_module.OCI_DIGEST_PATTERN.fullmatch(target["oci_image"])
+                for target in oci
+            )
+        )
+
+    def test_emulated_linux_targets_are_not_claimed_as_hosted(self):
+        targets = targets_module.load_targets()
+        unavailable = {
+            target["triple"]
+            for target in targets
+            if target["group"] == "linux-unavailable"
+        }
+        self.assertEqual(
+            unavailable,
+            {"arm-linux-gnueabihf", "riscv64-linux-gnu"},
+        )
+        self.assertTrue(
+            all(
+                not target["hosted"]
+                for target in targets
+                if target["triple"] in unavailable
+            )
         )
 
 
