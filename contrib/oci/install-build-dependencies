@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# Prepare the digest-pinned Python Bullseye OCI image for an HWI bundle build.
+
+export DEBIAN_FRONTEND=noninteractive
+export PIP_DISABLE_PIP_VERSION_CHECK=1
+
+set -euo pipefail
+
+readonly expected_python="${HWI_PYTHON_VERSION:-3.12.10}"
+readonly expected_glibc="2.31"
+readonly snapshot="${HWI_DEBIAN_SNAPSHOT:-20250508T000000Z}"
+
+if [[ "$(id -u)" != 0 ]]; then
+    echo "OCI dependency installation must run as root" >&2
+    exit 1
+fi
+
+actual_python="$(python -c 'import platform; print(platform.python_version())')"
+if [[ "${actual_python}" != "${expected_python}" ]]; then
+    echo "Python ${actual_python} does not match ${expected_python}" >&2
+    exit 1
+fi
+
+actual_glibc="$(ldd --version | sed -n '1s/.* //p')"
+if [[ "${actual_glibc}" != "${expected_glibc}" ]]; then
+    echo "glibc ${actual_glibc} does not match ${expected_glibc}" >&2
+    exit 1
+fi
+
+case "$(dpkg --print-architecture)" in
+    amd64|arm64) ;;
+    *)
+        echo "The hosted OCI builder supports only amd64 and arm64" >&2
+        exit 1
+        ;;
+esac
+
+# The base OCI digest fixes Python and glibc. Pin Debian packages to a dated
+# snapshot as well, so rebuilding later cannot silently select newer tools.
+for source in /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources; do
+    if [[ -e "${source}" && ! -e "${source}.hwi-disabled" ]]; then
+        mv "${source}" "${source}.hwi-disabled"
+    fi
+done
+printf '%s\n' \
+    "deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/${snapshot} bullseye main" \
+    "deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/${snapshot} bullseye-security main" \
+    > /etc/apt/sources.list.d/hwi-snapshot.list
+
+apt-get update
+apt-get install -y --no-install-recommends \
+    binutils \
+    file \
+    libusb-1.0-0
+rm -rf /var/lib/apt/lists/*
+
+python -m pip install --no-cache-dir "poetry==2.3.1"
+if [[ "$(poetry --version)" != "Poetry (version 2.3.1)" ]]; then
+    echo "Unexpected Poetry version: $(poetry --version)" >&2
+    exit 1
+fi
+
+echo "Prepared Python ${actual_python}, glibc ${actual_glibc}, snapshot ${snapshot}"
